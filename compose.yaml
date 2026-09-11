@@ -1,0 +1,38 @@
+volumes:
+  pg_data_koffito:
+services:
+  db:
+    ports:
+      - "5432:5432"
+    image: postgres:17.6-trixie
+    env_file:
+      - .env
+    volumes:
+      - pg_data_koffito:/var/lib/postgresql/data
+    healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+          interval: 10s
+          timeout: 5s
+          retries: 5
+          start_period: 10s
+  db-migrate:
+    build: .
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      db-migrate:
+        condition: service_completed_successfully
