@@ -342,8 +342,8 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = "==1.19.2" },
     { name = "fastapi", extras = ["standard"], specifier = "==0.141.1" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.5" },
-    { name = "sqlalchemy", specifier = ">=2.0.52" },
+    { name = "psycopg", extras = ["binary"], specifier = "==3.3.5" },
+    { name = "sqlalchemy", specifier = "==2.0.52" },
 ]
 
 [[package]]
