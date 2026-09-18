@@ -3,9 +3,7 @@ from alembic.operations import MigrateOperation
 
 
 def enable_rls(op, table_name):
-    """Enable Postgres row-level security on a table. No-op on other dialects."""
-    if op.get_bind().dialect.name != "postgresql":
-        return
+    """Enable Postgres row-level security on a table."""
     op.execute(f'ALTER TABLE "{table_name}" ENABLE ROW LEVEL SECURITY')
 
 
