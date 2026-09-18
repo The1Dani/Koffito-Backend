@@ -1,3 +1,3 @@
-from .item import ItemRepository
+from .venue import VenueRepository
 
-__all__ = ["ItemRepository"]
+__all__ = ["VenueRepository"]

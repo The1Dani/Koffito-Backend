@@ -1,3 +1,3 @@
-from .item import ItemCreate, ItemOut
+from .venue import VenueCreate, VenueOut
 
-__all__ = ["ItemCreate", "ItemOut"]
+__all__ = ["VenueCreate", "VenueOut"]

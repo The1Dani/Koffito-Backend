@@ -1,3 +1,3 @@
-from .item import ItemNotFound, ItemService
+from .venue import VenueNotFound, VenueService
 
-__all__ = ["ItemNotFound", "ItemService"]
+__all__ = ["VenueNotFound", "VenueService"]
