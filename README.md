@@ -2,7 +2,11 @@
 
 FastAPI + SQLAlchemy backend for organising social meetup events.
 
+Needs a Postgres database (Supabase) — set `DATABASE_URL` first, see
+[docs/development.md](docs/development.md).
+
 ```bash
+export DATABASE_URL='postgresql+psycopg://...'
 uv sync
 uv run alembic upgrade head
 uv run fastapi dev src/koffito/main.py

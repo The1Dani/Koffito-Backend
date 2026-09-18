@@ -23,9 +23,9 @@ moment, which is where the `revealed` event status comes from.
 - **psycopg 3.3.5** (binary) — PostgreSQL driver
 - **uv** — dependency resolution, lockfile (`uv.lock`) and the Docker build
 
-Postgres is the production target (Supabase-flavoured: RLS is enabled per table and
-`profiles.id` / `admins.id` mirror `auth.users.id`). SQLite is the zero-config fallback
-for local work — `DATABASE_URL` defaults to `sqlite:///./koffito.db`.
+The database is Postgres hosted on Supabase (RLS is enabled per table and
+`profiles.id` / `admins.id` mirror `auth.users.id`). `DATABASE_URL` is required — there
+is no fallback database.
 
 ## Current state
 

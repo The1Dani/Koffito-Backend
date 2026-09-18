@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | [uv](https://docs.astral.sh/uv/) | `0.12.x` | dependency management, virtualenv, running commands |
 | Python | `3.14.7` exactly | pinned in `pyproject.toml` (`requires-python = "==3.14.7"`) |
+| Postgres database | 17 | a Supabase project, or a local Postgres container |
 | Docker + Compose | any recent | only for the container workflow |
 
 You do not need to install Python yourself — `uv` will fetch 3.14.7 for you.
@@ -17,10 +18,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ---
 
-## Quick start (SQLite, no database server)
+## Quick start
 
-This is the fastest path and needs nothing running in the background. `DATABASE_URL`
-defaults to `sqlite:///./koffito.db`, so a local file database is created for you.
+The app and Alembic both need `DATABASE_URL` pointing at Postgres — there is no
+default, and importing the app without it fails with `KeyError: 'DATABASE_URL'`.
 
 ```bash
 # 1. clone and enter the repo
@@ -30,10 +31,13 @@ cd koffito
 # 2. create the virtualenv and install exactly what's in uv.lock
 uv sync
 
-# 3. create the tables
+# 3. point at the database (see "Database" below)
+export DATABASE_URL='postgresql+psycopg://...'
+
+# 4. create the tables
 uv run alembic upgrade head
 
-# 4. run the API with autoreload
+# 5. run the API with autoreload
 uv run fastapi dev src/koffito/main.py
 ```
 
@@ -60,23 +64,36 @@ curl -X POST http://127.0.0.1:8000/venues \
 curl http://127.0.0.1:8000/venues
 ```
 
-To start over, delete the database file and re-run the migrations:
+To start over, roll everything back and re-apply:
 
 ```bash
-rm -f koffito.db && uv run alembic upgrade head
+uv run alembic downgrade base && uv run alembic upgrade head
 ```
-
-> SQLite is a convenience, not the target. Row-level security is skipped entirely
-> (see [database.md](database.md#row-level-security)) and `gen_random_uuid()` does not
-> exist there — SQLAlchemy's client-side `uuid4` default covers it. Test anything
-> schema-related against Postgres before you trust it.
 
 ---
 
-## Running against PostgreSQL
+## Database
 
-Point `DATABASE_URL` at Postgres and both the app and Alembic follow it — `env.py`
-reads the same value, so they can never disagree.
+The database is Postgres on Supabase. Point `DATABASE_URL` at it and both the app and
+Alembic follow — `env.py` reads the same value, so they can never disagree.
+
+### Supabase
+
+Copy the connection string from the Supabase dashboard (**Connect** button) and change
+the scheme from `postgresql://` to `postgresql+psycopg://`:
+
+```bash
+export DATABASE_URL='postgresql+psycopg://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres'
+```
+
+Use the **direct connection** or the **session pooler** (port `5432`). The transaction
+pooler (port `6543`) does not support prepared statements, which psycopg 3 uses
+automatically; it would need `connect_args={"prepare_threshold": None}` in
+`create_engine`, which is not set.
+
+### Local Postgres
+
+For work that should not touch a shared database, run a throwaway Postgres container:
 
 ```bash
 docker run -d --name koffito-pg \
@@ -146,7 +163,7 @@ The runtime image is `python:3.14.7-alpine` running as the non-root user `appuse
 
 ## Migrations
 
-All commands assume `DATABASE_URL` is set the way you want it (unset = SQLite).
+All commands need `DATABASE_URL` set to the database you want to change.
 
 ```bash
 # apply everything
@@ -178,9 +195,9 @@ uv run alembic history --verbose
    these automatically after every `CreateTableOp`.
 6. Apply with `alembic upgrade head` and check the downgrade path works too.
 
-Prefer generating against Postgres. Server defaults are rendered per-dialect, and
-generating against SQLite produces spellings like `sa.text('(CURRENT_TIMESTAMP)')` —
-harmless here, but not what Postgres would have emitted.
+Generate against a database that is already at `head` — autogenerate diffs the models
+against the live schema, so a stale database produces a migration that re-creates
+existing tables.
 
 ---
 

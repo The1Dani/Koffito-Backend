@@ -23,7 +23,7 @@ repositories/*.py      Raw DB access. No validation, no business rules.
 models/*.py            SQLAlchemy declarative models on the shared `Base`.
     │
     ▼
-PostgreSQL / SQLite
+PostgreSQL (Supabase)
 ```
 
 `schemas/*.py` (Pydantic) sits beside the routes and defines the wire format. It is
@@ -63,10 +63,11 @@ request and closes it in the `finally` block. Commits happen in the repository
 (`self.db.commit()` followed by `refresh`), not at request teardown.
 
 ```python
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./koffito.db")
+DATABASE_URL = os.environ["DATABASE_URL"]
 ```
 
-There is a `TODO` on that line — configuration is read straight from the environment
+The variable is required; importing `koffito.db` without it raises `KeyError`. There
+is a `TODO` on that line — configuration is read straight from the environment
 with no settings object, and how this should be handled is still open.
 
 ## Adding a new resource
