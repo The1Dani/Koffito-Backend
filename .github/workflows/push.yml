@@ -1,0 +1,13 @@
+on:
+  push:
+    branches: [dev, main]
+jobs:
+  notify_docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs deploy
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_REPO_TOKEN }}
+        run: |
+          gh api repos/The1Dani/<docs-repo>/dispatches \
+                      -f event_type=backend-updated
