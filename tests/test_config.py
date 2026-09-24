@@ -37,7 +37,10 @@ def test_secret_values_do_not_leak_in_repr():
 
 def test_list_settings_split_on_commas():
     s = Settings(
-        **BASE, cors_origins="https://a.app, https://b.app", trusted_hosts="api.koffito.app", _env_file=None
+        **BASE,
+        cors_origins="https://a.app, https://b.app",
+        trusted_hosts="api.koffito.app",
+        _env_file=None,
     )
     assert s.cors_origins == ["https://a.app", "https://b.app"]
     assert s.trusted_hosts == ["api.koffito.app"]
@@ -47,7 +50,11 @@ def test_production_requires_https_and_explicit_hosts():
     with pytest.raises(ValidationError):
         Settings(**BASE, environment="production", _env_file=None)
     s = Settings(
-        **BASE, environment="production", enforce_https=True, trusted_hosts="api.koffito.app", _env_file=None
+        **BASE,
+        environment="production",
+        enforce_https=True,
+        trusted_hosts="api.koffito.app",
+        _env_file=None,
     )
     assert s.trusted_hosts == ["api.koffito.app"]
 
