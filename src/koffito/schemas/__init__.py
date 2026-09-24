@@ -1,3 +1,1 @@
-from .venue import VenueCreate, VenueOut
-
-__all__ = ["VenueCreate", "VenueOut"]
+__all__: list[str] = []

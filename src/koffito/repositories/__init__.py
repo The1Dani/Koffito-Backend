@@ -1,3 +1,1 @@
-from .venue import VenueRepository
-
-__all__ = ["VenueRepository"]
+__all__: list[str] = []
