@@ -1,6 +1,7 @@
 nav:
   - Home: README.md
+  - frontend-integration.md
   - architecture.md
-  - database.md
   - api.md
+  - database.md
   - development.md

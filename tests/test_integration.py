@@ -1,6 +1,7 @@
 """Live checks against the real Supabase project. Opt in with:
 
-    KOFFITO_INTEGRATION=1 KOFFITO_TEST_EMAIL=... KOFFITO_TEST_PASSWORD=... uv run pytest tests/test_integration.py
+    KOFFITO_INTEGRATION=1 KOFFITO_TEST_EMAIL=... KOFFITO_TEST_PASSWORD=... \
+        uv run pytest tests/test_integration.py
 
 `.env` must hold SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY and KOFFITO_BACKEND_KEY.
 """

@@ -1,138 +1,58 @@
 # HTTP API
 
-Base URL in local development: `http://127.0.0.1:8000`
-Base URL under Docker Compose: `http://localhost:8000`
+The endpoint reference the mobile app is built against lives in
+[frontend-integration.md](frontend-integration.md) — request bodies, response JSON and
+error codes for every route. This page is the short map.
 
-FastAPI serves interactive docs generated from the same route definitions:
+Base URL in local development: `http://127.0.0.1:8000`. Swagger UI at `/docs`, ReDoc at
+`/redoc`, schema at `/openapi.json`.
 
-- Swagger UI — `/docs`
-- ReDoc — `/redoc`
-- OpenAPI JSON — `/openapi.json`
+## Authentication
 
-There is **no authentication** on any endpoint yet. Every route below is open.
+Every route except `GET /health` requires `Authorization: Bearer <Supabase access token>`.
+`401` responses carry `WWW-Authenticate: Bearer error="invalid_token"` and one of
+`missing_token`, `invalid_token`, `token_expired`, `unknown_kid`. Admin routes return
+`403 admin_required` unless `profiles.is_admin` is true for the caller.
 
 ## Routers
 
-| Router | Prefix | Tag | Source |
+| Router | Prefix | Rate limit | Source |
 | --- | --- | --- | --- |
-| root | — | — | `src/koffito/api/routes/root.py` |
-| venues | `/venues` | `venues` | `src/koffito/api/routes/venues.py` |
+| health | `/health`, `/` | none | `api/routes/root.py` |
+| me | `/me` | read 120/min, write 30/min | `api/routes/me.py` |
+| events | `/events` | read 120/min, write 30/min | `api/routes/events.py` |
+| users | `/users` | read 120/min | `api/routes/users.py` |
+| reports | `/reports` | 5/hour | `api/routes/reports.py` |
+| admin | `/admin/events`, `/admin/venues`, `/admin/reports` | 60/min | `api/routes/admin_*.py` |
 
----
-
-## `GET /`
-
-Health/liveness ping.
-
-**Response `200`**
-
-```json
-{ "Hello": "Koffito" }
-```
-
----
-
-## `POST /venues`
-
-Create a venue.
-
-> Note the path has no trailing slash — the router uses `@router.post("")`, so the
-> endpoint is exactly `/venues`. `POST /venues/` will redirect.
-
-**Request body** — `VenueCreate`
-
-| Field | Type | Required | Validation |
-| --- | --- | --- | --- |
-| `name` | string | yes | |
-| `address` | string | yes | |
-| `maps_url` | string \| null | no (default `null`) | |
-| `capacity` | integer | yes | must be `> 0` |
-
-```json
-{
-  "name": "Café Central",
-  "address": "Str. Ismail 33, Chișinău",
-  "maps_url": "https://maps.google.com/?q=...",
-  "capacity": 24
-}
-```
-
-**Response `200`** — `VenueOut`
-
-```json
-{
-  "id": "0f6a2c3e-5b41-4e9a-9d6e-3f1b2c4d5e6f",
-  "name": "Café Central",
-  "address": "Str. Ismail 33, Chișinău",
-  "maps_url": "https://maps.google.com/?q=...",
-  "capacity": 24,
-  "is_active": true,
-  "created_at": "2026-09-18T09:31:04.512Z"
-}
-```
-
-`is_active` and `created_at` are set by the database, not by the request.
-
-**Response `422`** — Pydantic validation error (missing field, `capacity <= 0`, …).
-
----
-
-## `GET /venues`
-
-List **active** venues only — the repository filters on `is_active`, so soft-disabled
-venues never appear here and there is currently no way to list them over HTTP.
-
-No query parameters: no pagination, filtering or sorting.
-
-**Response `200`** — `list[VenueOut]`
-
-```json
-[
-  {
-    "id": "0f6a2c3e-5b41-4e9a-9d6e-3f1b2c4d5e6f",
-    "name": "Café Central",
-    "address": "Str. Ismail 33, Chișinău",
-    "maps_url": null,
-    "capacity": 24,
-    "is_active": true,
-    "created_at": "2026-09-18T09:31:04.512Z"
-  }
-]
-```
-
----
-
-## `GET /venues/{venue_id}`
-
-Fetch a single venue by id. Unlike the list endpoint this returns inactive venues too.
-
-**Path parameter**
-
-| Name | Type | Notes |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| `venue_id` | UUID | malformed UUIDs are rejected with `422` before the handler runs |
+| GET | `/health` | liveness |
+| GET / PATCH | `/me` | profile + stats + settings / edit profile |
+| PUT | `/me/languages` | replace languages |
+| PATCH | `/me/settings` | notification / reminder toggles |
+| GET / PUT | `/me/survey` | read / save the survey |
+| GET | `/me/events` | my coffee talks |
+| GET | `/me/venues` | cafés I visited |
+| GET | `/events` | open events |
+| POST | `/events/{id}/join` · `/leave` · `/confirm` · `/reveal` · `/attendance` | participation actions (204) |
+| PUT | `/events/{id}/rating` | rate an attended event |
+| GET | `/users/{id}` | groupmate card (after reveal) |
+| POST | `/reports` | file a report |
+| GET / POST | `/admin/events` | list / create events |
+| GET / PATCH | `/admin/events/{id}` | read / edit an event |
+| GET | `/admin/events/{id}/participants` | participants with profile |
+| GET / POST | `/admin/venues` | list / create venues |
+| GET / PATCH / DELETE | `/admin/venues/{id}` | read / edit / deactivate |
+| GET | `/admin/reports` | triage list |
+| PATCH | `/admin/reports/{id}` | set status (handled_by = admin) |
 
-**Response `200`** — `VenueOut`
-
-**Response `404`**
+## Error envelope
 
 ```json
-{ "detail": "Venue not found" }
+{ "error": { "code": "event_full", "message": "event full", "details": null } }
 ```
 
-The service raises the domain exception `VenueNotFound`; the route catches it and
-converts it to the `HTTPException`. Domain exceptions never leak past the route layer.
-
-> The `404` is raised at runtime but is not declared on the route, so it does not
-> appear in `/openapi.json` — the generated schema lists only `200` and `422`. Passing
-> `responses={404: ...}` to the decorator would document it for clients.
-
----
-
-## Not yet exposed
-
-The schema covers profiles, events, groups, event participants, surveys, reports and
-admins ([database.md](database.md)), but none of them have routes, schemas, services or
-repositories yet. `src/koffito/api/deps.py` wires exactly one service,
-`get_venue_service`. See [architecture.md](architecture.md#adding-a-new-resource) for
-the slice to replicate when adding one.
+`code` is stable. `422 validation_error` carries `details: [{loc, msg, type}]`. `429` carries
+`Retry-After`. Successful responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining`.
+The full code table is in [frontend-integration.md](frontend-integration.md#error-envelope).
