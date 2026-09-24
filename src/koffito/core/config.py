@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         return _split_csv(value)
 
     @model_validator(mode="after")
-    def _production_guard(self) -> "Settings":
+    def _production_guard(self) -> Settings:
         if self.environment == "production":
             if not self.enforce_https:
                 raise ValueError("ENFORCE_HTTPS must be true in production")

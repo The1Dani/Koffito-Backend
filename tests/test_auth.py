@@ -1,41 +1,14 @@
 import time
 import uuid
-from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import httpx
-import jwt
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from koffito.core.auth import AuthenticatedUser, JWKSCache, TokenVerifier, get_current_user
 from koffito.core.errors import AuthError, register_exception_handlers
-
-SUPABASE_URL = "https://test.supabase.co"
-ISSUER = f"{SUPABASE_URL}/auth/v1"
-JWKS_URL = f"{ISSUER}/.well-known/jwks.json"
-
-
-class SigningKey:
-    def __init__(self, kid: str) -> None:
-        self.kid = kid
-        self.private = ec.generate_private_key(ec.SECP256R1())
-        self.pem = self.private.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-        public = jwt.algorithms.ECAlgorithm.to_jwk(self.private.public_key(), as_dict=True)
-        self.jwk = {**public, "kid": kid, "alg": "ES256", "use": "sig"}
-
-    def sign(self, claims: dict[str, Any], *, alg: str = "ES256", kid: str | None = None) -> str:
-        headers = {"kid": kid or self.kid}
-        if alg == "ES256":
-            return jwt.encode(claims, self.pem, algorithm="ES256", headers=headers)
-        return jwt.encode(claims, "shared-secret", algorithm=alg, headers=headers)
+from tests.support import ISSUER, JWKS_URL, SigningKey, claims
 
 
 class JWKSServer:
@@ -57,19 +30,6 @@ class FakeClock:
 
     def __call__(self) -> float:
         return self.now
-
-
-def claims(**overrides: Any) -> dict[str, Any]:
-    now = datetime.now(UTC)
-    base = {
-        "iss": ISSUER,
-        "aud": "authenticated",
-        "sub": str(uuid.uuid4()),
-        "role": "authenticated",
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(hours=1)).timestamp()),
-    }
-    return {**base, **overrides}
 
 
 @pytest.fixture
