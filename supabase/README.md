@@ -20,6 +20,7 @@ together with the backend code that depends on them.
 | `20260924111857_koffito_v5_04_gate_invoker_and_get_me.sql` | gate runs as invoker; `get_me()` |
 | `20260924112633_koffito_v5_05_get_my_events_blind.sql` | `get_my_events()` reports blind events |
 | `20260924132215_koffito_v6_01_backend_rpcs.sql` | `rate_event()` and `admin_list_events()` for the FastAPI backend |
+| `20260924140011_koffito_v6_02_surveys_upsert_grant.sql` | `update (user_id)` on `surveys` so the survey upsert works |
 
 ## Making a schema change
 

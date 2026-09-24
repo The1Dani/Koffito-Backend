@@ -32,9 +32,10 @@ internals.
   refresh. `supabase-js` stores the session in secure storage and refreshes it automatically.
 - **Every data request goes to the Koffito API** (profile, events, survey, join/leave,
   confirmations, ratings, reports) with `Authorization: Bearer <access_token>`, over HTTPS.
-- **Direct database access from the app is closed.** `supabase.from(...)`, `supabase.rpc(...)`
-  and the Storage/Realtime data paths are rejected by the server with
-  `42501 "Koffito data is only available through the Koffito API"`. Do not build on them.
+- **Direct database access from the app is closed.** `supabase.from(...)` and
+  `supabase.rpc(...)` are rejected by the server with
+  `42501 "Koffito data is only available through the Koffito API"`. Do not build on them
+  (Storage and Realtime are not part of this contract either).
 - The API verifies the token on every request (signature, expiry, audience) and takes the
   user id from the token — **never send your own user id in a body**; bodies with unknown
   fields are rejected with `422`.
@@ -230,7 +231,7 @@ present for `validation_error` (a list of `{loc, msg, type}`) and some constrain
 | --- | --- | --- |
 | 401 | `missing_token`, `invalid_token`, `token_expired`, `unknown_kid`, `not_authenticated` | Refresh the session once and retry; if it happens again, sign out. Response carries `WWW-Authenticate: Bearer`. |
 | 403 | `admin_required`, `forbidden` | Not allowed. Hide the action. |
-| 404 | `profile_not_found`, `survey_not_found`, `event_not_found`, `venue_not_found`, `report_not_found`, `not_found` | Nothing there (or not visible to this user). |
+| 404 | `profile_not_found`, `settings_not_found`, `survey_not_found`, `event_not_found`, `venue_not_found`, `report_not_found`, `not_found` | Nothing there (or not visible to this user). |
 | 409 | see the endpoint tables | A business rule said no. Show the specific message. |
 | 422 | `validation_error`, `empty_update`, `invalid_stage`, `unknown_language`, `invalid_rating`, `event_in_the_past`, `constraint_violation`, `invalid_reference`, `invalid_value`, `missing_field` | The request is malformed. Fix the form. |
 | 429 | `rate_limited` | Back off for `Retry-After` seconds. |
@@ -239,7 +240,8 @@ present for `validation_error` (a list of `{loc, msg, type}`) and some constrain
 ### Rate limits
 
 Per user (per API instance): reads 120/min, writes 30/min, reports 5/hour, admin 60/min.
-Successful responses carry `X-RateLimit-Limit` and `X-RateLimit-Remaining`.
+Successful responses with a body carry `X-RateLimit-Limit` and `X-RateLimit-Remaining`
+(`204` responses do not).
 
 ### Conventions
 
@@ -492,7 +494,7 @@ something went wrong. Groupmates stay visible via `GET /users/{id}`.
 
 ## 7. Things the app must NOT do
 
-- Use `supabase.from()`, `supabase.rpc()`, Storage or Realtime as a data path — blocked server-side.
+- Use `supabase.from()` or `supabase.rpc()` as a data path — blocked server-side.
 - Ship or use a service-role / `sb_secret_` key.
 - Put user ids (`user_id`, `reporter_id`, …) in request bodies — they are rejected.
 - Call the API over plain `http://` in production, or store the access token anywhere but the

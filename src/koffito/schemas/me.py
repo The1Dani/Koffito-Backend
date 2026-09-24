@@ -12,6 +12,14 @@ Language = Literal["ro", "ru", "en"]
 MIN_AGE_YEARS = 18
 
 
+def adult_cutoff(today: date) -> date:
+    """Latest birth date that is at least MIN_AGE_YEARS old on `today` (Feb 29 → Feb 28)."""
+    try:
+        return today.replace(year=today.year - MIN_AGE_YEARS)
+    except ValueError:
+        return today.replace(year=today.year - MIN_AGE_YEARS, day=28)
+
+
 class ProfileUpdate(StrictModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=60)
     avatar_emoji: str | None = Field(default=None, max_length=8)
@@ -35,9 +43,7 @@ class ProfileUpdate(StrictModel):
     def _adult(cls, value: date | None) -> date | None:
         if value is None:
             return None
-        today = date.today()
-        cutoff = today.replace(year=today.year - MIN_AGE_YEARS)
-        if value > cutoff or value < date(1900, 1, 1):
+        if value > adult_cutoff(date.today()) or value < date(1900, 1, 1):
             raise ValueError(f"must be at least {MIN_AGE_YEARS} years old")
         return value
 

@@ -198,3 +198,11 @@ def test_dependency_returns_user_and_records_it_on_request_state(key, clock):
     )
     assert r.status_code == 200
     assert r.json() == {"id": sub}
+
+
+async def test_token_is_not_exposed_in_repr(key, clock):
+    verifier = make_verifier(JWKSServer(key), clock)
+    token = key.sign(claims())
+    user = await verifier.verify(token)
+    assert token not in repr(user)
+    assert token not in str(user)

@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, Query
 
 from ...schemas import AdminReportOut, Page, ReportStatus, ReportStatusOut, ReportStatusUpdate
 from ...services import AdminReportService
-from ..deps import ADMIN, get_admin_report_service, require_admin
+from ..deps import ADMIN, get_admin_report_service, get_current_user, require_admin
 
 router = APIRouter(
-    prefix="/admin/reports", tags=["admin"], dependencies=[Depends(require_admin), Depends(ADMIN)]
+    prefix="/admin/reports",
+    tags=["admin"],
+    dependencies=[Depends(get_current_user), Depends(ADMIN), Depends(require_admin)],
 )
 
 

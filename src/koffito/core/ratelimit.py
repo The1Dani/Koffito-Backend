@@ -66,7 +66,7 @@ class SlidingWindowLimiter:
 def rate_limited(
     rl: RateLimit | Callable[[Any], RateLimit],
 ) -> Callable[[Request, Response], Awaitable[None]]:
-    """Build a FastAPI dependency enforcing `rl` per user (or per client IP before auth).
+    """Build a FastAPI dependency enforcing `rl` per user (per client IP when no user is set).
 
     `rl` may be a callable taking the app settings, so presets can be derived from config.
     """

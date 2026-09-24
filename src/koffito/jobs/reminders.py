@@ -91,11 +91,16 @@ async def _remind(
     except Exception:
         logger.exception("%s failed for participant %s; will retry", reminder.kind, row["id"])
         return False
-    await sb.update(
-        "event_participants",
-        {reminder.stamp_column: now.isoformat()},
-        auth=ServiceAuth(),
-        filters=[("id", f"eq.{row['id']}"), (reminder.stamp_column, "is.null")],
-        returning=False,
-    )
+    try:
+        await sb.update(
+            "event_participants",
+            {reminder.stamp_column: now.isoformat()},
+            auth=ServiceAuth(),
+            filters=[("id", f"eq.{row['id']}"), (reminder.stamp_column, "is.null")],
+            returning=False,
+        )
+    except Exception:
+        # Notified but not stamped: the next run may notify again. Better than aborting the pass.
+        logger.exception("could not stamp %s for participant %s", reminder.stamp_column, row["id"])
+        return False
     return True

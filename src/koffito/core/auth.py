@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -11,7 +11,7 @@ import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .errors import AuthError
+from .errors import AppError, AuthError
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,15 @@ class AuthenticatedUser:
     """The verified caller. `id` is the JWT `sub`; `token` is forwarded to PostgREST."""
 
     id: UUID
-    token: str
-    claims: Mapping[str, Any]
+    token: str = field(repr=False)
+    claims: Mapping[str, Any] = field(repr=False)
+
+
+class JWKSUnavailable(AppError):
+    """The signing keys could not be fetched; tokens cannot be verified right now."""
+
+    status_code = 503
+    code = "jwks_unavailable"
 
 
 class JWKSCache:
@@ -81,10 +88,14 @@ class JWKSCache:
         )
 
     async def _fetch(self) -> None:
-        response = await self._http.get(self._url)
-        response.raise_for_status()
+        try:
+            response = await self._http.get(self._url)
+            response.raise_for_status()
+            entries = response.json().get("keys", [])
+        except (httpx.HTTPError, ValueError, AttributeError) as exc:
+            raise JWKSUnavailable(f"could not fetch JWKS: {type(exc).__name__}") from exc
         keys: dict[str, jwt.PyJWK] = {}
-        for entry in response.json().get("keys", []):
+        for entry in entries:
             kid = entry.get("kid")
             if not kid:
                 continue

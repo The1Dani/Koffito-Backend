@@ -311,3 +311,32 @@ def test_reports_list_and_triage(client, admin, auth, user_id):
     assert r.status_code == 404
     r = client.patch(f"/admin/reports/{REPORT_ID}", headers=auth, json={"status": "closed"})
     assert r.status_code == 422
+
+
+def test_admin_rate_limit_runs_before_the_admin_check(signing_key, backend, auth):
+    """A non-admin must not be able to drive unbounded is_admin() calls through /admin/*."""
+    import httpx as _httpx
+
+    from koffito.core.config import Settings
+    from koffito.main import create_app
+    from tests.support import SUPABASE_URL
+
+    settings = Settings(
+        supabase_url=SUPABASE_URL,
+        supabase_publishable_key="pub-key",
+        koffito_backend_key="bk",
+        rate_limit_admin_limit=2,
+        rate_limit_admin_window_seconds=60,
+        _env_file=None,
+    )
+    backend.always("POST", "/rpc/is_admin", _httpx.Response(200, json=False))
+    app = create_app(settings, transport=_httpx.MockTransport(backend))
+    from fastapi.testclient import TestClient
+
+    with TestClient(app) as client:
+        assert client.get("/admin/events", headers=auth).status_code == 403
+        assert client.get("/admin/events", headers=auth).status_code == 403
+        assert len(backend.calls("POST", "/rpc/is_admin")) == 2
+        r = client.get("/admin/events", headers=auth)
+    assert r.status_code == 429
+    assert len(backend.calls("POST", "/rpc/is_admin")) == 2  # limited before touching the DB

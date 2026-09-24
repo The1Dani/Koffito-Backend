@@ -11,7 +11,7 @@ from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .api.routes import admin_events, admin_reports, admin_venues, events, me, reports, root, users
-from .core.auth import JWKSCache, TokenVerifier
+from .core.auth import JWKSCache, JWKSUnavailable, TokenVerifier
 from .core.config import Settings, get_settings
 from .core.errors import register_exception_handlers
 from .core.logging import configure_logging
@@ -53,7 +53,7 @@ def create_app(
         )
         try:
             await jwks.refresh()
-        except httpx.HTTPError as exc:
+        except JWKSUnavailable as exc:
             if settings.environment == "production":
                 await http.aclose()
                 raise

@@ -150,3 +150,18 @@ async def test_job_registry_and_one_shot_runner(sb, backend):
     for name in JOBS:
         await run_job(name, sb, notifier)
     assert notifier.sent == []
+
+
+async def test_stamp_failure_is_counted_and_does_not_abort_the_run(sb, backend):
+    rows = [participant("p1", U1, "joined"), participant("p2", U2, "joined")]
+    backend.on("GET", "/event_participants", httpx.Response(200, json=rows))
+    backend.on("GET", "/event_participants", httpx.Response(200, json=[]))  # 3h pass must still run
+    backend.on("PATCH", "/event_participants", httpx.Response(500, text="boom"))
+    backend.on("PATCH", "/event_participants", httpx.Response(204))
+    notifier = RecordingNotifier()
+
+    stats = await run_reminders(sb, notifier, now=NOW)
+
+    assert (stats.sent_24h, stats.failed) == (1, 1)
+    assert len(notifier.sent) == 2
+    assert len(backend.calls("GET", "/event_participants")) == 2

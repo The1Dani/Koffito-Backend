@@ -69,6 +69,15 @@ Live checks against the real project (opt-in, needs `.env` and a confirmed test 
 KOFFITO_INTEGRATION=1 KOFFITO_TEST_EMAIL=… KOFFITO_TEST_PASSWORD=… uv run pytest tests/test_integration.py
 ```
 
+End-to-end scripts that drive a running local API (`uv run koffito`) with throwaway users
+created through the Supabase admin API (needs `SUPABASE_SERVICE_ROLE_KEY` in `.env`; they
+clean up after themselves):
+
+```bash
+scripts/e2e-user.sh     # gate, /me, survey, join/confirm/reveal/rating/leave, reports, non-admin 403
+scripts/e2e-admin.sh    # admin events/venues/reports, reminder send + stamp, jobs skeletons
+```
+
 ## Background jobs
 
 ```bash

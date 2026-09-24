@@ -4,10 +4,12 @@ from fastapi import APIRouter, Depends, Response
 
 from ...schemas import VenueCreate, VenueOut, VenueUpdate
 from ...services import AdminVenueService
-from ..deps import ADMIN, get_admin_venue_service, require_admin
+from ..deps import ADMIN, get_admin_venue_service, get_current_user, require_admin
 
 router = APIRouter(
-    prefix="/admin/venues", tags=["admin"], dependencies=[Depends(require_admin), Depends(ADMIN)]
+    prefix="/admin/venues",
+    tags=["admin"],
+    dependencies=[Depends(get_current_user), Depends(ADMIN), Depends(require_admin)],
 )
 
 

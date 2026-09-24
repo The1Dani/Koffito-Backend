@@ -4,6 +4,7 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 
 from koffito.api.deps import require_admin
+from koffito.core.auth import JWKSUnavailable
 from koffito.core.config import Settings
 from koffito.core.ratelimit import SlidingWindowLimiter
 from koffito.main import create_app
@@ -54,7 +55,7 @@ def test_jwks_failure_at_startup_fails_fast_in_production(signing_key):
         _env_file=None,
     )
     app = create_app(settings, transport=httpx.MockTransport(backend))
-    with pytest.raises(httpx.HTTPStatusError), TestClient(app):
+    with pytest.raises(JWKSUnavailable), TestClient(app):
         pass
 
 
@@ -116,3 +117,18 @@ def test_require_admin_requires_a_token(app):
 
     with TestClient(app) as client:
         assert client.get("/_admin").status_code == 401
+
+
+def test_jwks_outage_at_request_time_is_503(signing_key, token):
+    backend = FakeBackend(signing_key, jwks_status=503)
+    settings = Settings(
+        supabase_url=SUPABASE_URL,
+        supabase_publishable_key="pub-key",
+        koffito_backend_key="bk",
+        _env_file=None,
+    )
+    app = create_app(settings, transport=httpx.MockTransport(backend))
+    with TestClient(app) as client:
+        r = client.get("/me", headers={"authorization": f"Bearer {token}"})
+    assert r.status_code == 503
+    assert r.json()["error"]["code"] == "jwks_unavailable"

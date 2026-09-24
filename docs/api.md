@@ -54,5 +54,5 @@ Every route except `GET /health` requires `Authorization: Bearer <Supabase acces
 ```
 
 `code` is stable. `422 validation_error` carries `details: [{loc, msg, type}]`. `429` carries
-`Retry-After`. Successful responses carry `X-RateLimit-Limit` / `X-RateLimit-Remaining`.
+`Retry-After`. Successful responses with a body carry `X-RateLimit-Limit` / `X-RateLimit-Remaining`.
 The full code table is in [frontend-integration.md](frontend-integration.md#error-envelope).

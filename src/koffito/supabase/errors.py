@@ -98,11 +98,14 @@ def map_supabase_error(err: SupabaseError) -> AppError:
         return AuthError("Token expired", code="token_expired")
     if code in _CODES:
         status, api_code = _CODES[code]
-        details = err.details if status == 422 else None
+        # Only FK details are safe and useful ("Key (event_id)=(…) is not present"); check /
+        # not-null violations carry "Failing row contains (…)" — the whole row.
+        details = err.details if code == "23503" else None
         return AppError(err.message, code=api_code, status_code=status, details=details)
-    if err.status >= 500:
-        return AppError("Supabase returned an error", code="upstream_error", status_code=502)
-    return AppError(err.message, code="upstream_error", status_code=502)
+    logger.warning(
+        "unmapped supabase error: status=%s code=%s message=%s", err.status, code, err.message
+    )
+    return AppError("Supabase rejected the request", code="upstream_error", status_code=502)
 
 
 async def _supabase_error(request: Request, exc: SupabaseError) -> JSONResponse:

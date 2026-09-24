@@ -13,10 +13,12 @@ from ...schemas import (
     Page,
 )
 from ...services import AdminEventService
-from ..deps import ADMIN, get_admin_event_service, require_admin
+from ..deps import ADMIN, get_admin_event_service, get_current_user, require_admin
 
 router = APIRouter(
-    prefix="/admin/events", tags=["admin"], dependencies=[Depends(require_admin), Depends(ADMIN)]
+    prefix="/admin/events",
+    tags=["admin"],
+    dependencies=[Depends(get_current_user), Depends(ADMIN), Depends(require_admin)],
 )
 
 
