@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -8,10 +8,9 @@ from .common import StrictModel
 from .reports import ReportReason, ReportStatus
 
 EventStatus = Literal["draft", "open", "matched", "confirmed", "completed", "cancelled"]
-T = TypeVar("T")
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     items: list[T]
     total: int
     limit: int
