@@ -1,17 +1,17 @@
 [project]
 name = "koffito"
 version = "0.1.0"
-description = "Add your description here"
+description = "Koffito backend: FastAPI API in front of Supabase (auth + RLS-guarded data)"
 readme = "README.md"
 authors = [
     { name = "The1Dani", email = "daniel.canter2013@gmail.com" }
 ]
 requires-python = "==3.14.7"
 dependencies = [
-    "alembic==1.19.2",
     "fastapi[standard]==0.141.1",
-    "psycopg[binary]==3.3.5",
-    "sqlalchemy==2.0.52",
+    "httpx==0.28.1",
+    "pydantic-settings==2.15.0",
+    "PyJWT[crypto]==2.15.0",
 ]
 
 [project.scripts]
@@ -20,3 +20,23 @@ koffito = "koffito:main"
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.16.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "T20"]
