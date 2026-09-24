@@ -6,6 +6,7 @@ from ..core.auth import AuthenticatedUser, get_current_user
 from ..core.config import Settings
 from ..core.errors import ForbiddenError
 from ..core.ratelimit import RateLimit, rate_limited
+from ..services import MeService
 from ..supabase import SupabaseRest, UserAuth
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "WRITE",
     "AuthenticatedUser",
     "get_current_user",
+    "get_me_service",
     "get_settings",
     "get_supabase",
     "require_admin",
@@ -52,3 +54,10 @@ REPORT = rate_limited(
 ADMIN = rate_limited(
     lambda s: RateLimit(s.rate_limit_admin_limit, s.rate_limit_admin_window_seconds, "admin")
 )
+
+
+def get_me_service(
+    user: AuthenticatedUser = Depends(get_current_user),
+    sb: SupabaseRest = Depends(get_supabase),
+) -> MeService:
+    return MeService(sb, user)
