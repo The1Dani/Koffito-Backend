@@ -6,7 +6,7 @@ from ..core.auth import AuthenticatedUser, get_current_user
 from ..core.config import Settings
 from ..core.errors import ForbiddenError
 from ..core.ratelimit import RateLimit, rate_limited
-from ..services import MeService
+from ..services import EventService, MeService, ReportService, UserService
 from ..supabase import SupabaseRest, UserAuth
 
 __all__ = [
@@ -16,9 +16,12 @@ __all__ = [
     "WRITE",
     "AuthenticatedUser",
     "get_current_user",
+    "get_event_service",
     "get_me_service",
+    "get_report_service",
     "get_settings",
     "get_supabase",
+    "get_user_service",
     "require_admin",
 ]
 
@@ -61,3 +64,24 @@ def get_me_service(
     sb: SupabaseRest = Depends(get_supabase),
 ) -> MeService:
     return MeService(sb, user)
+
+
+def get_event_service(
+    user: AuthenticatedUser = Depends(get_current_user),
+    sb: SupabaseRest = Depends(get_supabase),
+) -> EventService:
+    return EventService(sb, user)
+
+
+def get_user_service(
+    user: AuthenticatedUser = Depends(get_current_user),
+    sb: SupabaseRest = Depends(get_supabase),
+) -> UserService:
+    return UserService(sb, user)
+
+
+def get_report_service(
+    user: AuthenticatedUser = Depends(get_current_user),
+    sb: SupabaseRest = Depends(get_supabase),
+) -> ReportService:
+    return ReportService(sb, user)

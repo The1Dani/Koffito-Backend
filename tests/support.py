@@ -37,9 +37,8 @@ class SigningKey:
         headers = {"kid": kid or self.kid}
         if alg == "ES256":
             return jwt.encode(claims, self.pem, algorithm="ES256", headers=headers)
-        return jwt.encode(
-            claims, "shared-secret-for-tests-0123456789ab", algorithm=alg, headers=headers
-        )
+        secret = "shared-secret-for-tests-0123456789ab"  # >= 32 bytes: no PyJWT warning
+        return jwt.encode(claims, secret, algorithm=alg, headers=headers)
 
 
 def claims(**overrides: Any) -> dict[str, Any]:
@@ -59,8 +58,8 @@ class FakeBackend:
     """`httpx.MockTransport` handler standing in for Supabase.
 
     Serves the JWKS document for the signing keys it was given, records every PostgREST
-    request, and answers them from scripted responses (`on(method, path, ...)`), defaulting to
-    `200 []`.
+    request, and answers them from scripted responses: `on(method, path, ...)` queues one-shot
+    responses, `always(method, path, response)` sets a standing one; the default is `200 []`.
     """
 
     def __init__(self, *keys: SigningKey, jwks_status: int = 200) -> None:
@@ -69,9 +68,14 @@ class FakeBackend:
         self.jwks_fetches = 0
         self.requests: list[httpx.Request] = []
         self._scripted: dict[tuple[str, str], list[Responder]] = {}
+        self._always: dict[tuple[str, str], Responder] = {}
 
     def on(self, method: str, path: str, *responders: Responder) -> FakeBackend:
         self._scripted.setdefault((method.upper(), f"{REST}{path}"), []).extend(responders)
+        return self
+
+    def always(self, method: str, path: str, responder: Responder) -> FakeBackend:
+        self._always[(method.upper(), f"{REST}{path}")] = responder
         return self
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -81,11 +85,12 @@ class FakeBackend:
                 return httpx.Response(self.jwks_status, text="jwks unavailable")
             return httpx.Response(200, json={"keys": [k.jwk for k in self.keys]})
         self.requests.append(request)
-        queue = self._scripted.get((request.method, request.url.path))
-        if queue:
-            responder = queue.pop(0)
-            return responder(request) if callable(responder) else responder
-        return httpx.Response(200, json=[])
+        key = (request.method, request.url.path)
+        queue = self._scripted.get(key)
+        responder = queue.pop(0) if queue else self._always.get(key)
+        if responder is None:
+            return httpx.Response(200, json=[])
+        return responder(request) if callable(responder) else responder
 
     @property
     def last(self) -> httpx.Request:

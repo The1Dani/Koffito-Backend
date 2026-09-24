@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .api.routes import me, root
+from .api.routes import events, me, reports, root, users
 from .core.auth import JWKSCache, TokenVerifier
 from .core.config import Settings, get_settings
 from .core.errors import register_exception_handlers
@@ -127,4 +127,7 @@ def create_app(
 
     app.include_router(root.router)
     app.include_router(me.router)
+    app.include_router(events.router)
+    app.include_router(users.router)
+    app.include_router(reports.router)
     return app
