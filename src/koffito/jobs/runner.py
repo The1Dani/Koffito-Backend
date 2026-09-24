@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
 from ..supabase import SupabaseRest
+from .completion import run_completion
 from .matchmaking import run_matchmaking
 from .notifier import LoggingNotifier, Notifier
 from .reminders import run_reminders
@@ -27,10 +28,16 @@ async def _venues(sb: SupabaseRest, notifier: Notifier) -> Any:
     return await run_venue_assignment(sb)
 
 
+async def _completion(sb: SupabaseRest, notifier: Notifier) -> Any:
+    return await run_completion(sb)
+
+
+# Run order: freshly matched groups get a café in the same tick, then reminders go out.
 JOBS: dict[str, JobFn] = {
-    "reminders": _reminders,
     "matchmaking": _matchmaking,
     "venues": _venues,
+    "reminders": _reminders,
+    "completion": _completion,
 }
 
 

@@ -24,8 +24,8 @@ shortly before the event. This repository is the **backend API** the mobile app 
   audience, issuer), and calls Supabase's PostgREST **with that same token** — so the
   database's row-level security decides what each user may see or change. Admin routes
   additionally check `profiles.is_admin` in the database.
-- **Background jobs** (24h / 3h reminders; matchmaking and venue assignment as skeletons) run
-  in the backend with the service-role key, which bypasses RLS and never leaves the server.
+- **Background jobs** (matchmaking, venue assignment, 24h / 3h reminders, event completion)
+  run in the backend with the service-role key, which bypasses RLS and never leaves the server.
 
 ## Stack
 
@@ -38,6 +38,7 @@ shortly before the event. This repository is the **backend API** the mobile app 
 ## Current state
 
 Complete API surface for the app (`/me`, `/events`, `/users`, `/reports`) and for admins
-(`/admin/events`, `/admin/venues`, `/admin/reports`). Reminders are implemented; matchmaking
-and venue assignment have their reads and intended writes in place but no algorithm yet.
-Push delivery is a logging stub (`LoggingNotifier`).
+(`/admin/events`, `/admin/venues`, `/admin/reports`). All four jobs run: reminders, a v1
+matchmaking (groups in join order), a v1 venue assignment (largest active café that seats the
+group) and event completion (2 h after the start). Push delivery is a logging stub
+(`LoggingNotifier`); similarity-based matching is the intended v2.

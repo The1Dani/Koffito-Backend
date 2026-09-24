@@ -9,11 +9,11 @@ services:
     # Behind a TLS-terminating proxy set ENFORCE_HTTPS=true and TRUSTED_HOSTS in .env; uvicorn
     # already runs with --proxy-headers (see Dockerfile).
 
-  # Background jobs (matchmaking, venue assignment, reminders) need SUPABASE_SERVICE_ROLE_KEY.
-  # Either set JOBS_ENABLED=true on exactly one `app` instance, or run them as their own
-  # service / cron entry so replicas never double up:
-  # jobs:
-  #   build: .
-  #   env_file:
-  #     - .env
-  #   command: ["python", "-m", "koffito.jobs", "all", "--loop"]
+  # Background jobs (matchmaking, venue assignment, reminders, event completion) need
+  # SUPABASE_SERVICE_ROLE_KEY. They run here as their own service so `app` replicas never double
+  # up; alternatively drop this service and set JOBS_ENABLED=true on exactly one `app` instance.
+  jobs:
+    build: .
+    env_file:
+      - .env
+    command: ["python", "-m", "koffito.jobs", "all", "--loop"]

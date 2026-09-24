@@ -1,17 +1,19 @@
 """Matchmaking: split an open event's participants into groups of `target_group_size`.
 
-Skeleton. The reads and the intended writes are in place; `plan_groups()` — the actual
-grouping algorithm — is the TODO. Until it returns groups, this job never writes.
+v1 groups people in join order: the list of `joined` participants is chunked into groups of the
+target size; a trailing group of one is merged into the previous group; a lone participant with
+nobody to group with stays `joined` (and the event stays `open`) until someone else joins.
 
-Intended flow, per open event starting within MATCH_LEAD:
-  1. load `joined` participants with their survey embedding, languages, gender, age
-  2. plan_groups(): cluster by survey-embedding similarity (pgvector cosine; consider a
-     server-side `match_event(p_event_id)` SQL function so vectors never leave Postgres),
-     require at least one shared language, respect target_group_size (last group may be
-     smaller; 1-person groups are re-merged)
+Per open event starting within MATCH_LEAD:
+  1. load `joined` participants, oldest join first
+  2. plan_groups()
   3. insert one `groups` row per group (venue inherited from the event by trigger)
   4. PATCH the participants: group_id + status 'matched'
   5. PATCH the event: status 'matched'
+
+v2 (not here yet): cluster by survey-embedding similarity (pgvector cosine; consider a
+server-side `match_event(p_event_id)` SQL function so vectors never leave Postgres) and require
+at least one shared language.
 """
 
 import logging
@@ -24,11 +26,7 @@ from ..supabase import ServiceAuth, SupabaseRest
 logger = logging.getLogger(__name__)
 
 MATCH_LEAD = timedelta(hours=26)  # a little before the default reveal_at (event_at - 24h)
-PARTICIPANT_COLUMNS = (
-    "id,user_id,"
-    "profiles!inner(gender,date_of_birth,surveys(embedding,embedding_version),"
-    "profile_languages(language))"
-)
+PARTICIPANT_COLUMNS = "id,user_id,joined_at"
 
 
 @dataclass
@@ -39,13 +37,19 @@ class MatchmakingStats:
 
 
 def plan_groups(participants: list[dict[str, Any]], target_size: int) -> list[list[dict[str, Any]]]:
-    """TODO: the grouping algorithm. Returns no groups until it exists."""
-    if participants:
-        logger.warning(
-            "matchmaking algorithm not implemented: %d participants left unmatched",
-            len(participants),
-        )
-    return []
+    """Chunk the participants (already in join order) into groups of `target_size`.
+
+    A trailing group of one is merged into the previous group rather than left alone; a single
+    participant with nobody else gets no group at all.
+    """
+    size = max(target_size, 2)
+    groups = [participants[i : i + size] for i in range(0, len(participants), size)]
+    if len(groups) >= 2 and len(groups[-1]) == 1:
+        groups[-2].extend(groups.pop())
+    if groups and len(groups[-1]) == 1:
+        logger.info("matchmaking: one participant left unmatched (nobody to group with)")
+        return []
+    return groups
 
 
 async def run_matchmaking(sb: SupabaseRest, *, now: datetime | None = None) -> MatchmakingStats:
@@ -68,6 +72,7 @@ async def run_matchmaking(sb: SupabaseRest, *, now: datetime | None = None) -> M
             auth=ServiceAuth(),
             columns=PARTICIPANT_COLUMNS,
             filters=[("event_id", f"eq.{event['id']}"), ("status", "eq.joined")],
+            order="joined_at.asc",
         )
         groups = plan_groups(participants, event["target_group_size"])
         for members in groups:

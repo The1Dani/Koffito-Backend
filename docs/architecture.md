@@ -92,10 +92,15 @@ container and scale by replicas, or plug a Redis-backed `Limiter` into `app.stat
 `jobs/` runs with `ServiceAuth()` only. `reminders.py` finds participants whose event starts
 within 24 h / 3 h, notifies them through a `Notifier` (`LoggingNotifier` until push is wired
 up) and stamps `reminded_24h_at` / `reminded_3h_at` with an `is.null` guard so overlapping
-runners never double-stamp. `matchmaking.py` and `venues.py` contain the reads and intended
-writes with the algorithm left as a TODO. `runner.py` runs them sequentially every
-`JOBS_INTERVAL_SECONDS`; `python -m koffito.jobs <name|all> [--loop]` is the one-shot / cron
-entry point for multi-replica deployments.
+runners never double-stamp. `matchmaking.py` (v1) chunks an open event's `joined` participants,
+in join order, into groups of `target_group_size` (a trailing single joins the previous group; a
+lone participant waits), inserts the `groups` rows, marks the participants `matched` and the
+event `matched`. `venues.py` (v1) gives a venue-less group the largest active café that seats
+it (unknown capacity counts as fitting, then by name). `completion.py` marks `open` /
+`matched` / `confirmed` events `completed` two hours after they start, which is what stats,
+visited cafés and ratings key on. `runner.py` runs them in that order (matchmaking, venues,
+reminders, completion) every `JOBS_INTERVAL_SECONDS`; `python -m koffito.jobs <name|all>
+[--loop]` is the one-shot / cron entry point, and `compose.yaml` runs it as the `jobs` service.
 
 ## Adding a resource
 

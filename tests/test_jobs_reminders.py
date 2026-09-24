@@ -144,7 +144,7 @@ async def test_notify_failure_leaves_the_row_for_the_next_run(sb, backend):
 
 
 async def test_job_registry_and_one_shot_runner(sb, backend):
-    assert set(JOBS) == {"reminders", "matchmaking", "venues"}
+    assert list(JOBS) == ["matchmaking", "venues", "reminders", "completion"]
     notifier = RecordingNotifier()
     # nothing due anywhere: every job completes against an empty backend
     for name in JOBS:

@@ -81,12 +81,13 @@ scripts/e2e-admin.sh    # admin events/venues/reports, reminder send + stamp, jo
 ## Background jobs
 
 ```bash
-uv run python -m koffito.jobs reminders          # one shot
+uv run python -m koffito.jobs reminders          # one shot: matchmaking | venues | reminders | completion
 uv run python -m koffito.jobs all --loop         # every JOBS_INTERVAL_SECONDS
 ```
 
 Needs `SUPABASE_SERVICE_ROLE_KEY`. In-process (`JOBS_ENABLED=true`) is the single-instance
-convenience; with several replicas run the CLI from one cron / one container instead.
+convenience; with several replicas run the CLI from one cron / one container instead
+(`docker compose up` starts it as the `jobs` service).
 
 ## Docker
 

@@ -1,16 +1,15 @@
 """Venue assignment: give every matched group a café.
 
-Skeleton. Groups normally inherit the event's default venue on insert; this job handles the
-rest. `choose_venue()` — the selection rule — is the TODO. Until it picks something, nothing is
-written.
+Groups normally inherit the event's default venue on insert; this job handles the rest. v1
+picks the first active café that can seat the group (largest capacity first, unknown capacity
+counts as "fits", then by name for a stable choice).
 
-Intended flow:
+Flow:
   1. load groups with no venue whose event is upcoming
   2. load active venues (capacity, coordinates, popular_times)
-  3. choose_venue(): capacity >= group size, then distance to the members, then popular_times
-  4. PATCH the group: venue_id (+ avg_distance)
-  5. when every group of an event has reservation_status 'confirmed' → PATCH the event to
-     'confirmed' (reservations themselves are confirmed by an admin, not here)
+  3. choose_venue(): capacity >= group size (v2: distance to the members, popular_times)
+  4. PATCH the group: venue_id
+  5. reservations are confirmed by an admin, not here; the event turns 'confirmed' then
 """
 
 import logging
@@ -30,12 +29,14 @@ class VenueStats:
 
 
 def choose_venue(group: dict[str, Any], venues: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """TODO: the selection rule. Returns nothing until it exists."""
-    if venues:
-        logger.warning(
-            "venue assignment not implemented: group %s left without a café", group["id"]
-        )
-    return None
+    """The first active café that seats the group: largest capacity first, then by name."""
+    size = group["events"]["target_group_size"]
+    fitting = [v for v in venues if v.get("capacity") is None or v["capacity"] >= size]
+    if not fitting:
+        logger.warning("no café seats %d people: group %s left without a venue", size, group["id"])
+        return None
+    fitting.sort(key=lambda v: (v.get("capacity") is None, -(v.get("capacity") or 0), v["name"]))
+    return fitting[0]
 
 
 async def run_venue_assignment(sb: SupabaseRest, *, now: datetime | None = None) -> VenueStats:
