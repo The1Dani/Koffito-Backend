@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -12,9 +12,14 @@ class OpenEventOut(BaseModel):
 
     id: UUID
     event_at: datetime
+    reveal_at: datetime
+    # Blind: the café stays secret until `reveal_at` (and from non-participants after it).
+    blind: bool
     max_participants: int
     spots_left: int
     joined: bool
+    # Only for non-blind coffee talks.
+    cafe: dict[str, Any] | None = None
 
 
 class ConfirmIn(StrictModel):

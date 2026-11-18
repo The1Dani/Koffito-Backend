@@ -5,10 +5,11 @@ import asyncio
 import logging
 import sys
 
+from ..auth.mailer import Mailer
 from ..core.config import Settings
 from ..core.logging import configure_logging
 from ..db import Database
-from .notifier import LoggingNotifier
+from .notifier import EmailNotifier
 from .runner import JOBS, run_forever, run_job
 
 logger = logging.getLogger("koffito.jobs")
@@ -27,7 +28,7 @@ async def _run(args: argparse.Namespace, settings: Settings) -> int:
     db = Database(settings.database_url.get_secret_value(), max_size=4)
     await db.open()
     try:
-        notifier = LoggingNotifier()
+        notifier = EmailNotifier(db, Mailer(settings), settings)
         if args.loop:
             interval = args.interval or settings.jobs_interval_seconds
             await run_forever(db, interval=interval, notifier=notifier, names=names)

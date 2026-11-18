@@ -16,6 +16,10 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "db" / "migrations"
 
 
 def migrate(dsn: str, directory: Path = MIGRATIONS) -> list[str]:
+    files = sorted(directory.glob("*.sql"))
+    if not files:
+        # A missing folder would otherwise look like "nothing new" and leave an empty schema.
+        raise RuntimeError(f"no migrations found in {directory}")
     applied_now: list[str] = []
     with psycopg.connect(dsn, autocommit=False) as conn:
         conn.execute(
@@ -30,7 +34,7 @@ def migrate(dsn: str, directory: Path = MIGRATIONS) -> list[str]:
         # One migrator at a time (two app containers starting together).
         conn.execute("select pg_advisory_xact_lock(hashtext('koffito.migrate'))")
         done = dict(conn.execute("select name, sha256 from public.schema_migrations").fetchall())
-        for path in sorted(directory.glob("*.sql")):
+        for path in files:
             sql = path.read_text(encoding="utf-8")
             digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
             if path.name in done:

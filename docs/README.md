@@ -41,5 +41,5 @@ shortly before the event. This repository is the **backend API** the app talks t
 Complete API surface for the app (`/auth`, `/me`, `/events`, `/users`, `/reports`) and for
 admins (`/admin/events`, `/admin/venues`, `/admin/reports`). All four jobs run: reminders, a v1
 matchmaking (groups in join order), a v1 venue assignment (largest active café that seats the
-group) and event completion (2 h after the start). Reminder delivery is a logging stub
-(`LoggingNotifier`); similarity-based matching is the intended v2.
+group) and event completion (2 h after the start). Reminders go out by email
+(`EmailNotifier`, times in `APP_TIMEZONE`); similarity-based matching is the intended v2.

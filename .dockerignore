@@ -13,3 +13,4 @@ dist
 docs
 supabase
 tests
+db/seed/dev-accounts.txt

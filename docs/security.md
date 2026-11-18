@@ -50,6 +50,12 @@ refresh token: httpOnly cookie ──cookie──▶   auth/service.py rotate / 
 
 ## Email verification and password reset
 
+- **No pre-registration takeover.** Each sign-up's confirmation link carries that sign-up's
+  password hash and name, and confirming applies them. If someone else registered the email
+  first, the mailbox owner's own link still gives the account *their* password, and the other
+  pending links stop working. "Resend" can't know which pending sign-up is the owner's, so it
+  sends a link to confirm the email **and choose the password**.
+
 - Sign-up creates the account unverified; **sign-in is refused until the email is confirmed**
   (`email_not_verified`, only after the password was correct, so it reveals nothing).
 - Links carry a 256-bit random single-use token. Only its SHA-256 is stored
@@ -65,6 +71,10 @@ refresh token: httpOnly cookie ──cookie──▶   auth/service.py rotate / 
   Registering an email that already has an account sends its owner a reset link instead.
 - Wrong password and unknown email return the same `401 invalid_credentials`; for unknown
   emails a dummy Argon2 verification runs, so both take the same time.
+- Known trade-off: once an account is locked (10 failures), `account_locked` tells the caller
+  that the address exists. Getting there costs 10 failed logins for that address, which the
+  per-IP limit slows down. We chose to give real users a clear "locked, try later or reset"
+  message instead of a vague one.
 
 ## Abuse protection — `src/koffito/core/ratelimit.py`, `api/routes/auth.py`
 

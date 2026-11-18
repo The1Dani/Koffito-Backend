@@ -102,7 +102,7 @@ def test_open_events_never_leak_the_hidden_cafe(client, outbox, clean_db):
     ana = signup(client, outbox, "ana@example.com")
     add_event(clean_db, venue=add_venue(clean_db))
     (event,) = client.get("/events", headers=ana).json()
-    assert "default_venue_id" not in event and "cafe" not in event
+    assert "default_venue_id" not in event and event["cafe"] is None and event["blind"] is True
 
 
 # --- event rules -------------------------------------------------------------------------------

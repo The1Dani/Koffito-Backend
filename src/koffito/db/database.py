@@ -122,7 +122,13 @@ def _page(limit: int | None, offset: int | None) -> tuple[sql.Composable, list[A
 
 
 def _adapt(value: Any) -> Any:
-    return Jsonb(value) if isinstance(value, (dict, list)) else value
+    """Objects (and lists of objects) go to Postgres as jsonb; plain lists stay arrays
+    (`text[]` languages, `smallint[]` popular times)."""
+    if isinstance(value, dict) or (
+        isinstance(value, list) and any(isinstance(v, dict) for v in value)
+    ):
+        return Jsonb(value)
+    return value
 
 
 def _plain(value: Any) -> Any:
@@ -224,15 +230,14 @@ class Database:
             if kind == "record"
             else sql.SQL("select t as value from {} as t").format(call)
         )
-        query = sql.SQL("select *{} from ({}) as q{}{}{}").format(
-            sql.SQL(", count(*) over () as __total") if count else sql.SQL(""),
-            source,
-            where,
-            _order(order),
-            page,
-        )
+        query = sql.SQL("select * from ({}) as q{}{}{}").format(source, where, _order(order), page)
         rows = await self.fetch(query, [*values, *wparams, *pparams], auth=auth)
-        return self._shape(rows, kind, count=count, single=single)
+        items = self._shape(rows, kind, single=single)
+        if not count:
+            return items
+        counted = sql.SQL("select count(*) as n from ({}) as q{}").format(source, where)
+        total = await self.fetchrow(counted, [*values, *wparams], auth=auth)
+        return Page(items, total["n"] if total else 0)
 
     async def select(
         self,
@@ -249,16 +254,17 @@ class Database:
     ) -> Any:
         where, wparams = _where(filters)
         page, pparams = _page(limit, offset)
-        query = sql.SQL("select {}{} from public.{}{}{}{}").format(
-            _columns(columns),
-            sql.SQL(", count(*) over () as __total") if count else sql.SQL(""),
-            _ident(table),
-            where,
-            _order(order),
-            page,
+        query = sql.SQL("select {} from public.{}{}{}{}").format(
+            _columns(columns), _ident(table), where, _order(order), page
         )
         rows = await self.fetch(query, [*wparams, *pparams], auth=auth)
-        return self._shape(rows, "record", count=count, single=single)
+        items = self._shape(rows, "record", single=single)
+        if not count:
+            return items
+        # Counted separately: a page past the end still reports the real total.
+        counted = sql.SQL("select count(*) as n from public.{}{}").format(_ident(table), where)
+        total = await self.fetchrow(counted, wparams, auth=auth)
+        return Page(items, total["n"] if total else 0)
 
     async def insert(
         self,
@@ -318,18 +324,6 @@ class Database:
         )
         return result if returning else None
 
-    async def delete(
-        self, table: str, *, auth: Auth, filters: Sequence[Filter], returning: bool = False
-    ) -> Any:
-        if not filters:
-            raise ValueError("delete requires at least one filter")
-        where, wparams = _where(filters)
-        query = sql.SQL("delete from public.{}{}").format(_ident(table), where)
-        if returning:
-            query += sql.SQL(" returning *")
-        result = await self.fetch(query, wparams, auth=auth)
-        return result if returning else None
-
     # --- internals -----------------------------------------------------------------------------
 
     def _tx(self, auth: Auth):
@@ -357,16 +351,13 @@ class Database:
         return self._fn_cache[fn]
 
     @staticmethod
-    def _shape(rows: list[dict[str, Any]], kind: str, *, count: bool, single: bool) -> Any:
-        total = rows[0].pop("__total", len(rows)) if rows else 0
-        for row in rows[1:]:
-            row.pop("__total", None)
+    def _shape(rows: list[dict[str, Any]], kind: str, *, single: bool) -> Any:
         items = rows if kind == "record" else [r["value"] for r in rows]
         if single:
             if len(items) != 1:
                 raise DatabaseError(404, "not_found", "expected exactly one row")
             return items[0]
-        return Page(items, int(total)) if count else items
+        return items
 
 
 class _Transaction:

@@ -3,6 +3,7 @@
 import html
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from email.message import EmailMessage
 
 import aiosmtplib
@@ -65,6 +66,30 @@ class Mailer:
             f"The link works for {self._settings.verify_email_ttl_hours} hours.",
             button="Confirm my email",
             link=f"{self._settings.app_base_url}/verify-email?token={token}",
+        )
+
+    def confirm_and_choose_password(self, to: str, token: str) -> Mail:
+        return Mail(
+            to=to,
+            subject="Confirm your email for Koffito",
+            heading="One sip away ☕",
+            body="Tap the button to confirm your email and choose your password. "
+            f"The link works for {self._settings.verify_email_ttl_hours} hours.",
+            button="Confirm and choose a password",
+            link=f"{self._settings.app_base_url}/reset-password?token={token}",
+        )
+
+    def reminder(self, to: str, kind: str, at: datetime, event_id: str) -> Mail:
+        time = at.strftime("%H:%M")
+        when = f"tomorrow at {time}" if kind == "reminder_24h" else f"in about 3 hours, at {time}"
+        return Mail(
+            to=to,
+            subject=f"Your coffee talk is {when}",
+            heading="Coffee time soon ☕",
+            body=f"Your Koffito coffee talk is {when}. Open the app to see the café and who's "
+            "coming, and let them know you'll be there.",
+            button="See my coffee talk",
+            link=f"{self._settings.app_base_url}/event-details?id={event_id}",
         )
 
     def password_reset(self, to: str, token: str) -> Mail:

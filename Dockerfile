@@ -23,6 +23,8 @@ WORKDIR /app
 
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --chown=appuser:appuser src ./src
+# Schema migrations + seed data (python -m koffito.migrate / koffito.cli seed)
+COPY --chown=appuser:appuser db ./db
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH="/app/src"

@@ -82,9 +82,9 @@ process: run one uvicorn worker per container and scale by replicas, or plug a s
   groups of `target_group_size`, creates the groups and marks participants and event
   `matched`.
 - `venues.py` (v1) gives a venue-less group the largest active café that seats it.
-- `reminders.py` notifies participants whose event starts within 24 h / 3 h, through a
-  `Notifier` (`LoggingNotifier` until push or email reminders are wired up). It stamps
-  `reminded_*_at` with an `is null` guard.
+- `reminders.py` emails participants whose event starts within 24 h / 3 h (`EmailNotifier`;
+  only confirmed addresses, respecting the reminders setting). It stamps `reminded_*_at`
+  with an `is null` guard; a failed send is retried on the next run.
 - `completion.py` marks events `completed` two hours after they start.
 
 `runner.py` runs them every `JOBS_INTERVAL_SECONDS`. `python -m koffito.jobs <name|all> [--loop]`

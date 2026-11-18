@@ -42,7 +42,7 @@ Cookie-based routes (`/auth/refresh`, `/auth/logout`) require the header
 | Route | Body | Result |
 | --- | --- | --- |
 | `POST /auth/register` | `{"email", "password", "first_name"}` | `202 {"ok": true}` — always, even if the email is taken. A confirmation link is emailed. |
-| `POST /auth/resend-verification` | `{"email"}` | `202` — a fresh link (older ones stop working) |
+| `POST /auth/resend-verification` | `{"email"}` | `202` — emails a link to **confirm and choose the password** (`/reset-password?token=…`, handled like a reset) |
 | `POST /auth/verify-email` | `{"token"}` (from the link `/verify-email?token=…`) | session; `400 invalid_link` if expired/used |
 | `POST /auth/login` | `{"email", "password"}` | session; `401 invalid_credentials`, `403 email_not_verified`, `429 account_locked` |
 | `POST /auth/refresh` | — (cookie) | new session; the cookie is rotated. `401 invalid_refresh` → signed out |

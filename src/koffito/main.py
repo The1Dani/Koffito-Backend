@@ -70,10 +70,15 @@ def create_app(settings: Settings | None = None, *, db: Database | None = None) 
 
         jobs_task: asyncio.Task[None] | None = None
         if settings.jobs_enabled:
+            from .jobs.notifier import EmailNotifier
             from .jobs.runner import run_forever
 
             jobs_task = asyncio.create_task(
-                run_forever(database, interval=settings.jobs_interval_seconds),
+                run_forever(
+                    database,
+                    interval=settings.jobs_interval_seconds,
+                    notifier=EmailNotifier(database, mailer, settings),
+                ),
                 name="koffito-jobs",
             )
         try:

@@ -44,6 +44,12 @@ class AccountLocked(AppError):
     code = "account_locked"
 
 
+def _invalid_link() -> AppError:
+    return AppError(
+        "This link has expired or was already used", code="invalid_link", status_code=400
+    )
+
+
 class AuthService:
     def __init__(
         self, db: Database, settings: Settings, verifier: TokenVerifier, mailer: Mailer
@@ -58,11 +64,15 @@ class AuthService:
     async def register(self, email: str, password: str, first_name: str) -> Mail | None:
         """Create the account (unverified) and return the email to send.
 
-        For an email that already has an account nothing is created; the owner gets a short
-        "you already have an account" email instead, so the response looks the same.
+        The confirmation link carries this registration's password hash and name, and confirming
+        applies them. So if someone registered the email first (unconfirmed), the mailbox
+        owner's own link still gives the account *their* password — no pre-registration
+        takeover. An already-confirmed account gets a reset link instead, so the response
+        looks the same either way.
         """
         email = normalise_email(email)
         check_policy(password, email=email)
+        password_hash, name = hash_password(password), first_name.strip()[:60]
         row = await self._db.fetchrow(
             """
             with u as (
@@ -76,33 +86,44 @@ class AuthService:
             )
             select id from u
             """,
-            [email, hash_password(password), first_name.strip()[:60]],
+            [email, password_hash, name],
             auth=SYSTEM,
         )
-        if row is None:
+        if row is not None:
+            logger.info("registered user %s", row["id"])
+            user_id = UUID(row["id"])
+        else:
             existing = await self._user_by_email(email)
-            if existing and existing["email_verified_at"] is None:
-                return await self._verification_mail(UUID(existing["id"]), email)
-            return (
-                self._mailer.password_reset(
-                    email,
-                    await self._email_token(
-                        UUID(existing["id"]),
-                        "reset_password",
-                        minutes=self._settings.reset_password_ttl_minutes,
-                    ),
+            if existing is None:  # deleted in between; nothing to do
+                return None
+            user_id = UUID(existing["id"])
+            if existing["email_verified_at"] is not None:
+                token = await self._email_token(
+                    user_id, "reset_password", minutes=self._settings.reset_password_ttl_minutes
                 )
-                if existing
-                else None
-            )
-        logger.info("registered user %s", row["id"])
-        return await self._verification_mail(UUID(row["id"]), email)
+                return self._mailer.password_reset(email, token)
+        # Pending links from other registrations stay valid until one of them is used.
+        token = await self._email_token(
+            user_id,
+            "verify_email",
+            minutes=self._settings.verify_email_ttl_hours * 60,
+            password_hash=password_hash,
+            display_name=name,
+            revoke_older=False,
+        )
+        return self._mailer.verification(email, token)
 
     async def resend_verification(self, email: str) -> Mail | None:
+        """A fresh link for an unconfirmed account. It can't know which pending registration
+        is the mailbox owner's, so it confirms the email *and* lets them choose the password
+        (a reset link), instead of reusing a password someone else may have typed."""
         user = await self._user_by_email(normalise_email(email))
         if user is None or user["email_verified_at"] is not None:
             return None
-        return await self._verification_mail(UUID(user["id"]), user["email"])
+        token = await self._email_token(
+            UUID(user["id"]), "reset_password", minutes=self._settings.verify_email_ttl_hours * 60
+        )
+        return self._mailer.confirm_and_choose_password(user["email"], token)
 
     async def verify_email(self, token: str, *, user_agent: str | None) -> Session:
         """Consume a verification link and sign the user in on this device."""
@@ -112,19 +133,28 @@ class AuthService:
               update public.email_tokens set used_at = now()
               where token_hash = %s and purpose = 'verify_email'
                 and used_at is null and expires_at > now()
-              returning user_id
+              returning user_id, password_hash, display_name
+            ), others as (
+              -- every other pending link for this account stops working
+              update public.email_tokens o set used_at = now()
+              from t where o.user_id = t.user_id and o.purpose = 'verify_email'
+                and o.used_at is null and o.token_hash <> %s
+            ), named as (
+              update public.profiles p set display_name = coalesce(t.display_name, p.display_name)
+              from t where p.id = t.user_id
             )
-            update public.users u set email_verified_at = coalesce(u.email_verified_at, now())
+            update public.users u
+            set email_verified_at = coalesce(u.email_verified_at, now()),
+                password_hash = coalesce(t.password_hash, u.password_hash),
+                password_changed_at = now()
             from t where u.id = t.user_id
             returning u.id
             """,
-            [token_hash(token)],
+            [token_hash(token), token_hash(token)],
             auth=SYSTEM,
         )
         if row is None:
-            raise AppError(
-                "This link has expired or was already used", code="invalid_link", status_code=400
-            )
+            raise _invalid_link()
         return await self._start_session(UUID(row["id"]), user_agent=user_agent)
 
     # --- sign in / out --------------------------------------------------------------------------
@@ -181,18 +211,37 @@ class AuthService:
     async def refresh(self, refresh_token: str, *, user_agent: str | None) -> Session:
         """Rotate: the presented token is spent and a new one in the same family is issued.
 
-        Spending is one conditional UPDATE, so two requests with the same token can never both
-        succeed. A token that was already spent means a copy exists somewhere: the whole family
-        (that sign-in on every device it reached) is revoked. The web app serialises refreshes
-        across tabs (Web Locks), so a legitimate client never replays a token.
+        Spend, issue and link happen in one statement, so two requests with the same token can
+        never both succeed and a crash can't leave the user without a valid token. A token that
+        was already spent means a copy exists somewhere: the whole family (that sign-in on every
+        device it reached) is revoked. The web app serialises refreshes across tabs (Web
+        Locks), so a legitimate client never replays a token.
         """
+        token, fresh_id = new_token(), uuid4()
+        expires_at = datetime.now(UTC) + timedelta(days=self._settings.refresh_token_ttl_days)
+        # The new row's id is chosen up front so the old row is spent *and* linked in a single
+        # update (Postgres won't update the same row twice in one statement).
         spent = await self._db.fetchrow(
             """
-            update public.refresh_tokens set revoked_at = now()
-            where token_hash = %s and revoked_at is null and expires_at > now()
-            returning id, user_id, family_id
+            with old as (
+              update public.refresh_tokens set revoked_at = now(), replaced_by = %s
+              where token_hash = %s and revoked_at is null and expires_at > now()
+              returning user_id, family_id
+            ), fresh as (
+              insert into public.refresh_tokens
+                (id, user_id, family_id, token_hash, expires_at, user_agent)
+              select %s, user_id, family_id, %s, %s, %s from old
+            )
+            select user_id from old
             """,
-            [token_hash(refresh_token)],
+            [
+                fresh_id,
+                token_hash(refresh_token),
+                fresh_id,
+                token_hash(token),
+                expires_at,
+                (user_agent or "")[:200],
+            ],
             auth=SYSTEM,
         )
         if spent is None:
@@ -207,20 +256,7 @@ class AuthService:
                 await self._revoke_family(known["family_id"])
             raise AuthError("Session expired", code="invalid_refresh")
 
-        user_id = UUID(spent["user_id"])
-        token, expires_at = await self._insert_refresh(
-            user_id, UUID(spent["family_id"]), user_agent
-        )
-        await self._db.fetch(
-            """
-            update public.refresh_tokens
-            set replaced_by = (select id from public.refresh_tokens where token_hash = %s)
-            where id = %s
-            """,
-            [token_hash(token), spent["id"]],
-            auth=SYSTEM,
-        )
-        access, ttl = self._verifier.issue(user_id)
+        access, ttl = self._verifier.issue(UUID(spent["user_id"]))
         return Session(access, ttl, token, expires_at)
 
     async def logout(self, refresh_token: str | None) -> None:
@@ -256,9 +292,7 @@ class AuthService:
             auth=SYSTEM,
         )
         if holder is None:
-            raise AppError(
-                "This link has expired or was already used", code="invalid_link", status_code=400
-            )
+            raise _invalid_link()
         check_policy(new_password, email=holder["email"])
         row = await self._db.fetchrow(
             """
@@ -275,27 +309,18 @@ class AuthService:
                   email_verified_at = coalesce(u.email_verified_at, now())
               from t where u.id = t.user_id
               returning u.id
+            ), signed_out as (
+              -- every device is signed out
+              update public.refresh_tokens r set revoked_at = now()
+              from u where r.user_id = u.id and r.revoked_at is null
             )
-            update public.refresh_tokens r set revoked_at = now()
-            from u where r.user_id = u.id and r.revoked_at is null
-            returning u.id
+            select id from u
             """,
             [token_hash(token), hash_password(new_password)],
             auth=SYSTEM,
         )
-        if row is None:
-            # Either the token was raced, or the user had no sessions; confirm it was consumed.
-            used = await self._db.fetchrow(
-                "select used_at from public.email_tokens where token_hash = %s",
-                [token_hash(token)],
-                auth=SYSTEM,
-            )
-            if not used or used["used_at"] is None:
-                raise AppError(
-                    "This link has expired or was already used",
-                    code="invalid_link",
-                    status_code=400,
-                )
+        if row is None:  # used or expired in the meantime (e.g. a double submit)
+            raise _invalid_link()
 
     async def change_password(
         self, user_id: UUID, current: str, new: str, *, user_agent: str | None
@@ -336,13 +361,7 @@ class AuthService:
         )
 
     async def _start_session(self, user_id: UUID, *, user_agent: str | None) -> Session:
-        token, expires_at = await self._insert_refresh(user_id, uuid4(), user_agent)
-        access, ttl = self._verifier.issue(user_id)
-        return Session(access, ttl, token, expires_at)
-
-    async def _insert_refresh(
-        self, user_id: UUID, family_id: UUID, user_agent: str | None
-    ) -> tuple[str, datetime]:
+        """A new sign-in: a new refresh-token family and a first access token."""
         token = new_token()
         expires_at = datetime.now(UTC) + timedelta(days=self._settings.refresh_token_ttl_days)
         await self._db.fetch(
@@ -351,10 +370,11 @@ class AuthService:
               (user_id, family_id, token_hash, expires_at, user_agent)
             values (%s, %s, %s, %s, %s)
             """,
-            [user_id, family_id, token_hash(token), expires_at, (user_agent or "")[:200]],
+            [user_id, uuid4(), token_hash(token), expires_at, (user_agent or "")[:200]],
             auth=SYSTEM,
         )
-        return token, expires_at
+        access, ttl = self._verifier.issue(user_id)
+        return Session(access, ttl, token, expires_at)
 
     async def _revoke_family(self, family_id: str | UUID) -> None:
         await self._db.fetch(
@@ -364,28 +384,43 @@ class AuthService:
             auth=SYSTEM,
         )
 
-    async def _email_token(self, user_id: UUID, purpose: str, *, minutes: int) -> str:
-        """A new single-use link token; older unused ones for the same purpose stop working."""
+    async def _email_token(
+        self,
+        user_id: UUID,
+        purpose: str,
+        *,
+        minutes: int,
+        password_hash: str | None = None,
+        display_name: str | None = None,
+        revoke_older: bool = True,
+    ) -> str:
+        """A new single-use link token (stored hashed). By default older unused links for the
+        same purpose stop working."""
         token = new_token()
         await self._db.fetch(
             """
             with old as (
               update public.email_tokens set used_at = now()
-              where user_id = %s and purpose = %s and used_at is null
+              where %s and user_id = %s and purpose = %s and used_at is null
             )
-            insert into public.email_tokens (user_id, purpose, token_hash, expires_at)
-            values (%s, %s, %s, now() + make_interval(mins => %s))
+            insert into public.email_tokens
+              (user_id, purpose, token_hash, expires_at, password_hash, display_name)
+            values (%s, %s, %s, now() + make_interval(mins => %s), %s, %s)
             """,
-            [user_id, purpose, user_id, purpose, token_hash(token), minutes],
+            [
+                revoke_older,
+                user_id,
+                purpose,
+                user_id,
+                purpose,
+                token_hash(token),
+                minutes,
+                password_hash,
+                display_name,
+            ],
             auth=SYSTEM,
         )
         return token
-
-    async def _verification_mail(self, user_id: UUID, email: str) -> Mail:
-        token = await self._email_token(
-            user_id, "verify_email", minutes=self._settings.verify_email_ttl_hours * 60
-        )
-        return self._mailer.verification(email, token)
 
 
 def normalise_email(email: str) -> str:

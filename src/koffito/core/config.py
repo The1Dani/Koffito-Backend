@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     smtp_starttls: bool = False
     smtp_use_tls: bool = False
     mail_from: str = "Koffito <no-reply@koffito.local>"
+    # Times in emails (reminders) are shown in this zone.
+    app_timezone: str = "Europe/Chisinau"
 
     # --- Rate limiting (per user, per process) --------------------------------------------
     rate_limit_enabled: bool = True

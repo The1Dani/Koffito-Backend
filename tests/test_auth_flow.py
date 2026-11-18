@@ -1,6 +1,6 @@
 """Sign up → confirm → sign in → refresh → sign out, and the password flows, end to end."""
 
-from tests.conftest import Outbox, make_settings, signup, sql
+from tests.conftest import make_settings, signup, sql
 
 PASSWORD = "Cortado-and-croissant"
 
@@ -172,11 +172,26 @@ def test_change_password_needs_the_current_one(client, outbox):
     assert login(client, "ana@example.com", "Brand-new-mocha-3").status_code == 200
 
 
-def test_resend_verification_only_for_unconfirmed_accounts(client, outbox: Outbox):
+def test_resend_confirms_by_letting_the_mailbox_owner_choose_the_password(client, outbox):
     register(client, "ana@example.com")
     before = len(outbox.mails)
     client.post("/auth/resend-verification", json={"email": "ana@example.com"})
     assert len(outbox.mails) == before + 1
-    old = outbox.mails[before - 1].link.split("token=")[1]
-    # the previous link stopped working
-    assert client.post("/auth/verify-email", json={"token": old}).status_code == 400
+    token = outbox.token("ana@example.com", "reset-password")
+    assert (
+        client.post(
+            "/auth/reset-password", json={"token": token, "password": "Chosen-by-owner-5"}
+        ).status_code
+        == 204
+    )
+    assert login(client, "ana@example.com", "Chosen-by-owner-5").status_code == 200
+    assert login(client, "ana@example.com").status_code == 401
+
+
+def test_confirming_one_link_kills_the_other_pending_ones(client, outbox):
+    register(client, "ana@example.com", password="First-pass-123")
+    first = outbox.token("ana@example.com", "verify-email")
+    register(client, "ana@example.com", password="Second-pass-456")
+    second = outbox.token("ana@example.com", "verify-email")
+    assert client.post("/auth/verify-email", json={"token": second}).status_code == 200
+    assert client.post("/auth/verify-email", json={"token": first}).status_code == 400
