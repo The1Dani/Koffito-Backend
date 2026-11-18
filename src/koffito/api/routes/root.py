@@ -5,7 +5,7 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health(request: Request) -> dict[str, str]:
-    """Liveness probe. Public; says nothing about Supabase."""
+    """Liveness probe. Public; reveals nothing about the database or users."""
     return {
         "status": "ok",
         "version": request.app.version,

@@ -4,9 +4,9 @@
 
 | Tool | Version | Why |
 | --- | --- | --- |
-| [uv](https://docs.astral.sh/uv/) | 0.12.x | dependencies, virtualenv, running commands (downloads Python for you) |
+| [uv](https://docs.astral.sh/uv/) | 0.12+ | dependencies, virtualenv, running commands (downloads Python for you) |
 | Python | 3.14.7 exactly | `requires-python = "==3.14.7"` |
-| Docker + Compose | any recent | only for the container workflow |
+| Docker + Compose | any recent | Postgres and Mailpit (and optionally the API itself) |
 
 ## Configuration
 
@@ -15,108 +15,92 @@ a real environment variable.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `SUPABASE_URL` | yes | `https://<ref>.supabase.co` |
-| `SUPABASE_PUBLISHABLE_KEY` | yes | publishable (or legacy anon) key — public, the app ships the same one |
-| `KOFFITO_BACKEND_KEY` | yes | plaintext gate key from `select private.rotate_backend_key();` |
-| `SUPABASE_SERVICE_ROLE_KEY` | for jobs | service-role or `sb_secret_…` key; never used for user requests |
+| `AUTH_JWT_SECRET` | yes | HMAC key for access tokens, ≥ 32 random characters |
+| `DATABASE_URL` | no | defaults to the compose database `postgresql://koffito:koffito@localhost:5432/koffito` |
+| `APP_BASE_URL` | no | where email links point (the web app), default `http://localhost:5173` |
+| `SMTP_*`, `MAIL_FROM` | no | defaults to Mailpit on `localhost:1025` |
+| `ACCESS_TOKEN_TTL_MINUTES`, `REFRESH_TOKEN_TTL_DAYS`, `*_TTL_*`, `LOGIN_*` | no | session and lockout tuning |
+| `AUTH_COOKIE_PATH` | no | path the browser uses for `/auth` (default `/api/auth`, behind the web app's proxy) |
 | `JOBS_ENABLED`, `JOBS_INTERVAL_SECONDS` | no | run the job loop inside this process (one instance only) |
-| `RATE_LIMIT_*` | no | per-user limits; `RATE_LIMIT_ENABLED=false` switches them off |
+| `RATE_LIMIT_*` | no | limits; `RATE_LIMIT_ENABLED=false` switches them off |
 | `ENVIRONMENT`, `ENFORCE_HTTPS`, `TRUSTED_HOSTS`, `CORS_ORIGINS`, `LOG_LEVEL` | no | deployment; production requires `ENFORCE_HTTPS=true` and explicit `TRUSTED_HOSTS` |
-| `JWT_*`, `JWKS_*`, `SUPABASE_TIMEOUT_SECONDS` | no | verification tuning; defaults fit Supabase |
 
 The settings model is `src/koffito/core/config.py`.
 
 ## Run
 
 ```bash
-uv sync                      # creates .venv with the exact lockfile
-uv run koffito               # uvicorn with reload on 127.0.0.1:8000
-# or
-uv run uvicorn koffito.asgi:app --reload
+docker compose up -d db mail              # Postgres :5432, Mailpit SMTP :1025 / inbox :8025
+uv sync
+uv run python -m koffito.migrate          # apply db/migrations
+uv run python -m koffito.cli seed         # optional demo cafés + coffee talks
+uv run koffito                            # uvicorn with reload on 127.0.0.1:8000
 ```
 
-Swagger UI: <http://127.0.0.1:8000/docs>. Smoke test:
+Swagger UI: <http://127.0.0.1:8000/docs>. Every email the API sends shows up in Mailpit at
+<http://localhost:8025> (confirmation and reset links included).
+
+Admin rights: `uv run python -m koffito.cli make-admin you@example.com` (or `revoke-admin`).
+
+Manual token for curl:
 
 ```bash
-curl -s localhost:8000/health
-curl -i localhost:8000/me                       # 401 with the error envelope
+TOKEN=$(curl -s localhost:8000/auth/login -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","password":"…"}' | jq -r .access_token)
 curl -s localhost:8000/me -H "authorization: Bearer $TOKEN" | jq
 ```
 
-Getting a token for manual testing (email confirmation is on, so use an existing account):
-
-```bash
-TOKEN=$(curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password" \
-  -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H 'content-type: application/json' \
-  -d '{"email":"you@example.com","password":"…"}' | jq -r .access_token)
-```
+On Windows the async Postgres driver needs a selector event loop; `uv run koffito`, the jobs
+CLI and the tests already set it up.
 
 ## Tests and lint
 
 ```bash
-uv run pytest                              # unit + route tests against an in-memory fake Supabase
+uv run pytest                              # needs `docker compose up -d db`
 uv run ruff check . && uv run ruff format --check .
 ```
 
-Route tests run the real app against `tests/support.FakeBackend` through `httpx.MockTransport`:
-it serves the JWKS for a test signing key (`SigningKey`), answers PostgREST calls from scripted
-responses (`backend.on(...)` / `backend.always(...)`) and records every request, so tests assert
-the exact table / RPC, filters, `Prefer` header and that the user id came from the token.
-
-Live checks against the real project (opt-in, needs `.env` and a confirmed test account):
-
-```bash
-KOFFITO_INTEGRATION=1 KOFFITO_TEST_EMAIL=… KOFFITO_TEST_PASSWORD=… uv run pytest tests/test_integration.py
-```
-
-End-to-end scripts that drive a running local API (`uv run koffito`) with throwaway users
-created through the Supabase admin API (needs `SUPABASE_SERVICE_ROLE_KEY` in `.env`; they
-clean up after themselves):
-
-```bash
-scripts/e2e-user.sh     # gate, /me, survey, join/confirm/reveal/rating/leave, reports, non-admin 403
-scripts/e2e-admin.sh    # admin events/venues/reports, reminder send + stamp, jobs skeletons
-```
+The test suite creates a throwaway `koffito_test` database from `db/migrations` once per run
+and empties every table before each test. Emails are captured in memory (`Outbox` in
+`tests/conftest.py`). Point `TEST_DATABASE_URL` / `TEST_ADMIN_DATABASE_URL` elsewhere if
+needed; without a reachable Postgres the database tests are skipped.
 
 ## Background jobs
 
 ```bash
-uv run python -m koffito.jobs reminders          # one shot: matchmaking | venues | reminders | completion
+uv run python -m koffito.jobs matchmaking        # one shot: matchmaking | venues | reminders | completion
 uv run python -m koffito.jobs all --loop         # every JOBS_INTERVAL_SECONDS
 ```
 
-Needs `SUPABASE_SERVICE_ROLE_KEY`. In-process (`JOBS_ENABLED=true`) is the single-instance
-convenience; with several replicas run the CLI from one cron / one container instead
-(`docker compose up` starts it as the `jobs` service).
+In-process (`JOBS_ENABLED=true`) is the single-instance convenience; with several replicas run
+the CLI from one cron or one container instead (`docker compose --profile full up` starts it as
+the `jobs` service).
 
 ## Docker
 
 ```bash
-docker build -t koffito .
-docker run --rm --env-file .env -p 8000:8000 koffito
-# or
-docker compose up --build
+docker compose --profile full up --build   # db + mail + API (migrates on start) + jobs
 ```
 
 Two-stage build on `python:3.14.7-alpine`: the builder runs `uv sync --frozen
 --no-install-project --no-dev`; the runtime copies `.venv` and `src`, runs as `appuser`, and
-starts `uvicorn koffito.asgi:app --proxy-headers` so `ENFORCE_HTTPS` works behind a
-TLS-terminating proxy. `compose.yaml` runs the API from `.env`; a commented `jobs` service
-shows how to run the job loop separately.
+starts uvicorn with `--proxy-headers` so `ENFORCE_HTTPS` works behind a TLS-terminating proxy.
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pull requests to `dev` / `main`: `uv sync --frozen`,
-`uv lock --check`, ruff, pytest, then builds and pushes the image to GHCR. `push.yml`
-notifies the docs repository.
+`.github/workflows/ci.yml` runs on pull requests to `dev` / `main` with a Postgres service:
+`uv sync --frozen`, `uv lock --check`, ruff, pytest, then builds and pushes the image to GHCR.
+`push.yml` notifies the docs repository.
 
 ## Conventions
 
-- Async everywhere; one shared `httpx.AsyncClient` per process (created in the lifespan).
+- Async everywhere; one shared database pool per process (created in the lifespan).
 - Request bodies extend `schemas.common.StrictModel` (`extra="forbid"`); response models are
   plain `BaseModel`s; identifiers are `UUID`, timestamps `datetime`.
-- Services take `(sb, user)` and choose `UserAuth(user.token)`; only `jobs/` uses `ServiceAuth()`.
-- Errors: raise `AppError` subclasses in services; PostgREST failures are mapped centrally
-  (`supabase/errors.py`). Never log tokens or keys.
-- Keep `supabase/migrations/` in sync with the project (see `supabase/README.md`).
+- Services take `(db, user)` and use `UserAuth(user.id)`; only `jobs/` and `auth/` use
+  `ServiceAuth()`.
+- SQL: values are always parameters; identifiers go through `db.database._ident`. Schema
+  changes are new files in `db/migrations/`, never edits to applied ones.
+- Errors: raise `AppError` subclasses in services; database failures are mapped centrally
+  (`db/errors.py`). Never log tokens, passwords or keys.
 - `__init__.py` files re-export public names with a sorted `__all__`; one router per resource.

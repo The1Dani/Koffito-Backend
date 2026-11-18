@@ -11,6 +11,19 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      # Tests run against a real Postgres (they create their own koffito_test database).
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: koffito
+          POSTGRES_PASSWORD: koffito
+          POSTGRES_DB: koffito
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U koffito -d koffito"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v5
 

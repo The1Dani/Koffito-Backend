@@ -1,6 +1,6 @@
 # HTTP API
 
-The endpoint reference the mobile app is built against lives in
+The endpoint reference the app is built against lives in
 [frontend-integration.md](frontend-integration.md) — request bodies, response JSON and
 error codes for every route. This page is the short map.
 
@@ -9,10 +9,12 @@ Base URL in local development: `http://127.0.0.1:8000`. Swagger UI at `/docs`, R
 
 ## Authentication
 
-Every route except `GET /health` requires `Authorization: Bearer <Supabase access token>`.
-`401` responses carry `WWW-Authenticate: Bearer error="invalid_token"` and one of
-`missing_token`, `invalid_token`, `token_expired`, `unknown_kid`. Admin routes return
-`403 admin_required` unless `profiles.is_admin` is true for the caller.
+`/auth/*` issues sessions (see [security.md](security.md) and
+[frontend-integration.md](frontend-integration.md#3-auth)). Every other route except
+`GET /health` requires `Authorization: Bearer <access token from /auth>`. `401` responses carry
+`WWW-Authenticate: Bearer error="invalid_token"` and one of `missing_token`, `invalid_token`,
+`token_expired`. Admin routes return `403 admin_required` unless `profiles.is_admin` is true
+for the caller.
 
 ## Routers
 

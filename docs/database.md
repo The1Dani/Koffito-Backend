@@ -1,21 +1,21 @@
 # Database
 
-The schema lives in the Supabase project **koffito** (`gxdebgnkrstzxtlvcsix`) and is owned by
-the SQL migrations mirrored in [`supabase/migrations/`](../supabase/README.md). Every table
-has row-level security; the backend talks to the database through PostgREST, either **as the
-user** (their JWT → role `authenticated`, RLS applies) or **as the service role** (jobs).
+Our own Postgres 17 (with `pgvector`), run locally by `docker compose up -d db`. The schema is
+owned by [`db/migrations/`](../db/migrations) and applied with `python -m koffito.migrate`.
 
-## The Data API gate
+The FastAPI backend is the **only** client. Per request it opens a transaction and sets
+`app.user_id` (transaction-local); SQL functions read it through `app.uid()`. Background jobs
+and the auth service run without a user (`app.uid()` is null). See [security.md](security.md).
 
-A PostgREST pre-request hook (`private.check_request`, `pgrst.db_pre_request`) runs before
-every Data API call. For the `anon` and `authenticated` roles it requires the header
-`X-Koffito-Backend-Key` whose SHA-256 matches `private.backend_settings`; otherwise it raises
-`42501 "Koffito data is only available through the Koffito API"`. Only the backend knows the
-key (`KOFFITO_BACKEND_KEY`), so the app cannot use `supabase.from()` / `rpc()` at all. The
-service role is not gated. Auth endpoints (`/auth/v1/*`) are unaffected.
+## Accounts (our auth)
 
-Rotate with `select private.rotate_backend_key();` (returns the new plaintext once) and update
-the backend's environment immediately.
+| Table | Purpose |
+| --- | --- |
+| `users` | `email` (citext, unique), `password_hash` (Argon2id), `email_verified_at`, `failed_logins`, `locked_until`, `password_changed_at` |
+| `refresh_tokens` | SHA-256 of each refresh token, `family_id` (one per sign-in), `expires_at`, `revoked_at`, `replaced_by` (rotation chain) |
+| `email_tokens` | SHA-256 of verify / reset link tokens, `purpose`, `expires_at`, `used_at` |
+
+A `profiles` row (and `user_settings`) is created in the same statement as the `users` row.
 
 ## Tables (schema `public`)
 
@@ -51,26 +51,16 @@ Event lifecycle: `draft` → `open` (joinable) → `matched` (groups formed) →
 `joined` → `matched` → `confirmed_24h` → `confirmed_3h`; `cancelled` if they leave,
 `no_show` from their own attendance answer.
 
-## Row-level security (role `authenticated`)
+## Access rules
 
-| Table | Policy summary |
-| --- | --- |
-| `profiles` | select own or admin; update own (column-limited; `is_admin` blocked by trigger) |
-| `user_settings` | select / update own |
-| `profile_languages` | select own or admin; insert / delete own |
-| `surveys` | select own or admin; insert / update own |
-| `venues` | select if revealed to me (`can_see_venue`) or admin; admin writes |
-| `events` | select non-draft or admin (column grant **excludes** `default_venue_id`); admin writes |
-| `groups` | select as member after reveal or admin; admin writes |
-| `event_participants` | select own or admin, plus groupmates after reveal |
-| `reports` | insert as self; select own or admin; admin update |
-| `event_ratings` | insert if attended; select own or admin; update own |
-
-`anon` has no grants at all (it only ever signs in). `service_role` has full access and bypasses RLS.
+There is no row-level security: the database is not exposed to clients. The rules that used to
+be RLS policies are enforced by the SQL functions (keyed on `app.uid()`) and by the repositories,
+which always filter on the user id from the access token. Admin data is only read behind
+`require_admin`. `tests/test_access_rules.py` checks every rule against a real database.
 
 ## SQL functions the backend calls
 
-User-facing (SECURITY DEFINER, keyed on `auth.uid()`; errors are `raise exception '<name>'`):
+User-facing (keyed on `app.uid()`; errors are `raise exception '<name>'`):
 
 | Function | Used by | Raises |
 | --- | --- | --- |
@@ -90,23 +80,15 @@ User-facing (SECURITY DEFINER, keyed on `auth.uid()`; errors are `raise exceptio
 | `admin_list_events()` | `GET /admin/events[/{id}]` | (empty for non-admins) |
 
 Helpers used by policies: `is_group_member`, `group_revealed`, `shares_revealed_group`,
-`can_see_venue`, `attended_event`, `profile_card`, `venue_card`. Triggers: `handle_new_user`
-(auth.users insert → profile + settings), `protect_is_admin`, `default_reveal_at`,
+`can_see_venue`, `attended_event`, `profile_card`, `venue_card`. Triggers: `default_reveal_at`,
 `inherit_event_venue`, `set_updated_at`.
 
-`rate_event` and `admin_list_events` exist because of the grants: `authenticated` may only
-update `(rating, comment)` on `event_ratings` (so a PostgREST upsert cannot work) and may
-not read `events.default_venue_id` (blind events).
+`rate_event` upserts the caller's rating only if they attended; `admin_list_events` returns
+rows only for admins (it is the one place `events.default_venue_id` is read for blind events).
 
 ## Migrations
 
-`supabase/migrations/*.sql` mirror `supabase_migrations.schema_migrations` byte for byte
-(checked by md5). See [`supabase/README.md`](../supabase/README.md) for the workflow and for
-bootstrapping a fresh project. Alembic is no longer used.
-
-## Advisor notes
-
-Supabase's security advisor flags the SECURITY DEFINER functions as callable by
-`authenticated` — intended, they are the API surface and only reachable through the gate —
-and the `vector` extension living in `public`. Leaked-password protection is off in Auth
-settings and worth enabling in the dashboard.
+`db/migrations/NNN_name.sql`, applied in order by `python -m koffito.migrate` and recorded with
+their SHA-256 in `schema_migrations`. A migration that changed after it was applied is an
+error: add a new file instead of editing an old one. `supabase/migrations/` is the old history
+and is not applied any more.

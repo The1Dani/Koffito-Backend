@@ -1,220 +1,100 @@
 # Koffito — frontend integration guide
 
-Everything the React Native (Expo) app needs to talk to Koffito. Written to be pasted into an
-AI assistant as context: it is self-contained and describes the *contract*, not the backend's
-internals.
+Everything the app needs to talk to Koffito. It describes the *contract*, not the backend's
+internals. The web app (`koffito-web`, `src/lib/api.ts`) is the reference implementation.
 
 ## 1. The trust model
 
 ```
-┌──────────────┐   auth only (sign up / in / out / refresh)   ┌──────────────────┐
-│  Expo app    │ ───────────────────────────────────────────▶ │  Supabase Auth   │
-│  (RN)        │ ◀─── access token (JWT, ~1h) + refresh token │                  │
-│              │                                              └──────────────────┘
-│              │   every data request                          ┌──────────────────┐
-│              │   Authorization: Bearer <access_token>        │  Koffito API     │
-│              │ ───────────────────────────────────────────▶ │  (FastAPI)       │
-│              │ ◀─── JSON                                     │                  │
-└──────────────┘                                               │  verifies JWT,   │
-                                                               │  calls Supabase  │
-                                                               │  with YOUR token │
-                                                               │  → RLS applies   │
-                                                               └────────┬─────────┘
-                                                                        ▼
-                                                               ┌──────────────────┐
-                                                               │ Supabase DB      │
-                                                               │ (PostgREST gate: │
-                                                               │  backend only)   │
-                                                               └──────────────────┘
+┌──────────────┐   POST /auth/*  (register, verify, login, refresh, logout, …)   ┌──────────────┐
+│  App         │ ───────────────────────────────────────────────────────────────▶ │  Koffito API │
+│              │ ◀── access token (JSON, 15 min) + refresh token (httpOnly cookie) │  (FastAPI)   │
+│              │                                                                   │              │
+│              │   every data request: Authorization: Bearer <access_token>       │  verifies,   │
+│              │ ───────────────────────────────────────────────────────────────▶ │  then talks  │
+│              │ ◀── JSON                                                          │  to Postgres │
+└──────────────┘                                                                   └──────────────┘
 ```
 
-- **The app talks to Supabase for authentication only**: sign up, sign in, sign out, token
-  refresh. `supabase-js` stores the session in secure storage and refreshes it automatically.
-- **Every data request goes to the Koffito API** (profile, events, survey, join/leave,
-  confirmations, ratings, reports) with `Authorization: Bearer <access_token>`, over HTTPS.
-- **Direct database access from the app is closed.** `supabase.from(...)` and
-  `supabase.rpc(...)` are rejected by the server with
-  `42501 "Koffito data is only available through the Koffito API"`. Do not build on them
-  (Storage and Realtime are not part of this contract either).
-- The API verifies the token on every request (signature, expiry, audience) and takes the
-  user id from the token — **never send your own user id in a body**; bodies with unknown
-  fields are rejected with `422`.
-- The app holds only the Supabase URL and the **publishable key**. There is no service key in
-  the app, ever.
+- **One server does everything**: accounts, sessions and data. There is no third-party auth
+  SDK in the app and no direct database access.
+- The **access token** is short-lived and kept **in memory only** — never in localStorage.
+  The **refresh token** is an httpOnly cookie the app's JavaScript never sees.
+- The API takes the user id from the token only — **never send your own user id in a
+  body**; bodies with unknown fields are rejected with `422`.
+- How it is secured is described in [security.md](security.md).
 
 ## 2. Environment
 
-```bash
-# .env (Expo public vars are bundled into the app — they are not secrets)
-EXPO_PUBLIC_SUPABASE_URL=https://gxdebgnkrstzxtlvcsix.supabase.co
-EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...   # from the Supabase dashboard
-EXPO_PUBLIC_API_URL=https://api.koffito.example           # the Koffito API base URL (no trailing slash)
-```
+The web app calls the API **on its own origin under `/api`**: the Vite dev server proxies
+`/api/*` to `http://127.0.0.1:8000/*` (`vite.config.ts`), and in production a reverse proxy does
+the same. That keeps the refresh cookie first-party and needs no CORS. If the API must live on
+another origin, set `CORS_ORIGINS` on the backend and `AUTH_COOKIE_PATH` to the auth path the
+browser uses.
 
-Packages: `@supabase/supabase-js`, `expo-secure-store`, `@react-native-async-storage/async-storage`,
-`aes-js`, `react-native-get-random-values`, `react-native-url-polyfill`.
+## 3. Auth
 
-## 3. Supabase client (auth only)
+All auth routes are under `/auth`. Responses that start a session return
+`{"access_token", "token_type": "bearer", "expires_in"}` **and** set the refresh cookie.
+Cookie-based routes (`/auth/refresh`, `/auth/logout`) require the header
+`X-Requested-With: koffito` (CSRF guard); sending it on every request is simplest.
 
-`expo-secure-store` caps values at 2 048 bytes, which a session exceeds. Keep an AES key in
-SecureStore and the encrypted session in AsyncStorage (the pattern Supabase documents):
+| Route | Body | Result |
+| --- | --- | --- |
+| `POST /auth/register` | `{"email", "password", "first_name"}` | `202 {"ok": true}` — always, even if the email is taken. A confirmation link is emailed. |
+| `POST /auth/resend-verification` | `{"email"}` | `202` — a fresh link (older ones stop working) |
+| `POST /auth/verify-email` | `{"token"}` (from the link `/verify-email?token=…`) | session; `400 invalid_link` if expired/used |
+| `POST /auth/login` | `{"email", "password"}` | session; `401 invalid_credentials`, `403 email_not_verified`, `429 account_locked` |
+| `POST /auth/refresh` | — (cookie) | new session; the cookie is rotated. `401 invalid_refresh` → signed out |
+| `POST /auth/logout` | — (cookie) | `204`; that sign-in is revoked on every device it reached |
+| `POST /auth/forgot-password` | `{"email"}` | `202` — always; a reset link is emailed if the account exists |
+| `POST /auth/reset-password` | `{"token", "password"}` (link `/reset-password?token=…`) | `204`; every session is signed out |
+| `POST /auth/change-password` | `{"current_password", "new_password"}` + Bearer | new session for this device; others signed out |
 
-```ts
-// lib/supabase.ts
-import "react-native-url-polyfill/auto";
-import "react-native-get-random-values";
-import { createClient } from "@supabase/supabase-js";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
-import * as aesjs from "aes-js";
-import { AppState } from "react-native";
-
-class LargeSecureStore {
-  private async encrypt(key: string, value: string) {
-    const encryptionKey = crypto.getRandomValues(new Uint8Array(256 / 8));
-    const cipher = new aesjs.ModeOfOperation.ctr(encryptionKey, new aesjs.Counter(1));
-    const encryptedBytes = cipher.encrypt(aesjs.utils.utf8.toBytes(value));
-    await SecureStore.setItemAsync(key, aesjs.utils.hex.fromBytes(encryptionKey));
-    return aesjs.utils.hex.fromBytes(encryptedBytes);
-  }
-  private async decrypt(key: string, value: string) {
-    const encryptionKeyHex = await SecureStore.getItemAsync(key);
-    if (!encryptionKeyHex) return null;
-    const cipher = new aesjs.ModeOfOperation.ctr(
-      aesjs.utils.hex.toBytes(encryptionKeyHex),
-      new aesjs.Counter(1),
-    );
-    return aesjs.utils.utf8.fromBytes(cipher.decrypt(aesjs.utils.hex.toBytes(value)));
-  }
-  async getItem(key: string) {
-    const encrypted = await AsyncStorage.getItem(key);
-    return encrypted ? this.decrypt(key, encrypted) : null;
-  }
-  async setItem(key: string, value: string) {
-    await AsyncStorage.setItem(key, await this.encrypt(key, value));
-  }
-  async removeItem(key: string) {
-    await AsyncStorage.removeItem(key);
-    await SecureStore.deleteItemAsync(key);
-  }
-}
-
-export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL!,
-  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-  {
-    auth: {
-      storage: new LargeSecureStore(),
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  },
-);
-
-// Refresh only while the app is in the foreground.
-AppState.addEventListener("change", (state) => {
-  if (state === "active") supabase.auth.startAutoRefresh();
-  else supabase.auth.stopAutoRefresh();
-});
-```
-
-### Auth calls
-
-```ts
-// Sign up. Email confirmation is ON: `session` is null until the user clicks the link.
-const { data, error } = await supabase.auth.signUp({
-  email, password,
-  options: { data: { first_name: firstName } }, // becomes profiles.display_name
-});
-
-// Sign in → session with access_token (JWT, ~1 h) + refresh_token
-const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-// Current session (refreshes automatically when close to expiry)
-const { data: { session } } = await supabase.auth.getSession();
-
-// Sign out
-await supabase.auth.signOut();
-
-// React to changes (SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT)
-supabase.auth.onAuthStateChange((event, session) => { /* update app state */ });
-```
-
-Signing up automatically creates the user's `profile` and `settings` rows on the server; the
-first `GET /me` after sign-in already works.
+Weak passwords are refused with `422 weak_password` and a user-facing message (min 8 chars, not
+a common password, not the email). Sign-in attempts are rate limited per IP; email-sending
+routes per address.
 
 ## 4. Calling the API
 
-One helper does everything: attach the token, retry **once** after a refresh on `401`, and
-sign out if the refreshed token is rejected too.
+One helper does everything: attach the token, and on `401` refresh **once** and retry; if the
+refresh is rejected, the session is over. Refreshes must be **serialised across tabs** (the
+server revokes a sign-in when a spent refresh token is reused):
 
 ```ts
-// lib/api.ts
-import { supabase } from "./supabase";
+let accessToken: string | null = null;
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL!;
-
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-    public details?: unknown,
-    public retryAfter?: number,
-  ) {
-    super(message);
-  }
-}
-
-async function accessToken(forceRefresh = false): Promise<string | null> {
-  if (forceRefresh) {
-    const { data, error } = await supabase.auth.refreshSession();
-    if (error || !data.session) return null;
-    return data.session.access_token;
-  }
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
-export async function api<T>(
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
-  path: string,
-  body?: unknown,
-  retried = false,
-): Promise<T> {
-  const token = await accessToken(retried);
-  if (!token) throw new ApiError(401, "missing_token", "Not signed in");
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+async function refresh(): Promise<boolean> {
+  return navigator.locks.request("koffito-refresh", async () => {
+    const r = await fetch("/api/auth/refresh", { method: "POST", headers: { "X-Requested-With": "koffito" } });
+    if (!r.ok) return (accessToken = null), false;
+    accessToken = (await r.json()).access_token;
+    return true;
   });
+}
 
-  if (res.status === 204) return undefined as T;
-
-  if (res.status === 401 && !retried) {
-    return api<T>(method, path, body, true); // refresh once, then retry
-  }
-  if (res.status === 401) {
-    await supabase.auth.signOut(); // refreshed token still rejected → session is dead
-  }
-
-  const payload = await res.json().catch(() => null);
-  if (!res.ok) {
-    const err = payload?.error ?? { code: "http_error", message: res.statusText };
-    const retryAfter = Number(res.headers.get("Retry-After")) || undefined;
-    throw new ApiError(res.status, err.code, err.message, err.details, retryAfter);
-  }
-  return payload as T;
+export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  const send = () =>
+    fetch(`/api${path}`, {
+      method: init.method ?? "GET",
+      headers: {
+        "X-Requested-With": "koffito",
+        ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+  let r = await send();
+  if (r.status === 401 && (await refresh())) r = await send();
+  if (r.status === 204) return undefined as T;
+  const data = await r.json();
+  if (!r.ok) throw Object.assign(new Error(data.error.message), data.error);
+  return data;
 }
 ```
 
-Usage: `await api<Me>("GET", "/me")`, `await api<void>("POST", `/events/${id}/join`)`.
+On app start, call `refresh()` once: if it succeeds the user is still signed in (the cookie
+lasted), then load `GET /me`.
 
 ### Error envelope
 
@@ -229,7 +109,7 @@ present for `validation_error` (a list of `{loc, msg, type}`) and some constrain
 
 | Status | Codes | Meaning / what to do |
 | --- | --- | --- |
-| 401 | `missing_token`, `invalid_token`, `token_expired`, `unknown_kid`, `not_authenticated` | Refresh the session once and retry; if it happens again, sign out. Response carries `WWW-Authenticate: Bearer`. |
+| 401 | `missing_token`, `invalid_token`, `token_expired`, `not_authenticated` | Refresh the session once and retry; if it happens again, sign out. Response carries `WWW-Authenticate: Bearer`. |
 | 403 | `admin_required`, `forbidden` | Not allowed. Hide the action. |
 | 404 | `profile_not_found`, `settings_not_found`, `survey_not_found`, `event_not_found`, `venue_not_found`, `report_not_found`, `not_found` | Nothing there (or not visible to this user). |
 | 409 | see the endpoint tables | A business rule said no. Show the specific message. |
@@ -494,12 +374,12 @@ something went wrong. Groupmates stay visible via `GET /users/{id}`.
 
 ## 7. Things the app must NOT do
 
-- Use `supabase.from()` or `supabase.rpc()` as a data path — blocked server-side.
-- Ship or use a service-role / `sb_secret_` key.
+- Store the access token in `localStorage` / `sessionStorage` — keep it in memory.
+- Refresh from two tabs at once — serialise with `navigator.locks` (a reused refresh token
+  ends the session).
 - Put user ids (`user_id`, `reporter_id`, …) in request bodies — they are rejected.
-- Call the API over plain `http://` in production, or store the access token anywhere but the
-  Supabase session storage.
-- Treat a JWT claim as proof of admin rights — only `GET /me` → `isAdmin` (server-checked
+- Call the API over plain `http://` in production.
+- Treat a token claim as proof of admin rights — only `GET /me` → `isAdmin` (server-checked
   again on every admin call) counts.
 
 ## 8. OpenAPI
