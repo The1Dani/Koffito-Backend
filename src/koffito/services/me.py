@@ -3,17 +3,17 @@ from typing import Any
 
 from ..core.auth import AuthenticatedUser
 from ..core.errors import NotFoundError, UnprocessableError
+from ..db import Database, DatabaseError, UserAuth
 from ..repositories import ProfileRepository, RpcRepository
 from ..schemas import LanguagesIn, ProfileUpdate, SettingsUpdate, SurveyIn
-from ..supabase import SupabaseError, SupabaseRest, UserAuth
 
 
 class MeService:
     """Everything about the signed-in user. Every call runs with the user's own token."""
 
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        auth = UserAuth(user.token)
+        auth = UserAuth(user.id)
         self._rpc = RpcRepository(sb, auth)
         self._profiles = ProfileRepository(sb, auth)
 
@@ -47,8 +47,8 @@ class MeService:
     async def get_survey(self) -> dict[str, Any]:
         try:
             return await self._profiles.get_survey(self.user.id)
-        except SupabaseError as exc:
-            if exc.code == "PGRST116":
+        except DatabaseError as exc:
+            if exc.code == "not_found":
                 raise NotFoundError("No survey yet", code="survey_not_found") from exc
             raise
 

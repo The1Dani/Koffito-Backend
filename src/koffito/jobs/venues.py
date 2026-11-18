@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from ..supabase import ServiceAuth, SupabaseRest
+from ..db import Database, ServiceAuth
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +39,20 @@ def choose_venue(group: dict[str, Any], venues: list[dict[str, Any]]) -> dict[st
     return fitting[0]
 
 
-async def run_venue_assignment(sb: SupabaseRest, *, now: datetime | None = None) -> VenueStats:
+async def run_venue_assignment(sb: Database, *, now: datetime | None = None) -> VenueStats:
     now = now or datetime.now(UTC)
     stats = VenueStats()
-    groups = await sb.select(
-        "groups",
+    groups = await sb.fetch(
+        """
+        select g.id, g.event_id, g.venue_id,
+               jsonb_build_object('event_at', e.event_at, 'status', e.status,
+                                  'target_group_size', e.target_group_size) as events
+        from public.groups g
+        join public.events e on e.id = g.event_id
+        where g.venue_id is null and e.event_at > %s
+        """,
+        [now],
         auth=ServiceAuth(),
-        columns="id,event_id,venue_id,events!inner(event_at,status,target_group_size)",
-        filters=[("venue_id", "is.null"), ("events.event_at", f"gt.{now.isoformat()}")],
     )
     if not groups:
         return stats

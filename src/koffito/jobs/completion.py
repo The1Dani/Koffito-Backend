@@ -9,7 +9,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from ..supabase import ServiceAuth, SupabaseRest
+from ..db import Database, ServiceAuth
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class CompletionStats:
     events_completed: int = 0
 
 
-async def run_completion(sb: SupabaseRest, *, now: datetime | None = None) -> CompletionStats:
+async def run_completion(sb: Database, *, now: datetime | None = None) -> CompletionStats:
     now = now or datetime.now(UTC)
     cutoff = now - COMPLETION_GRACE
     rows = await sb.update(

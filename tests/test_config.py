@@ -3,36 +3,34 @@ from pydantic import ValidationError
 
 from koffito.core.config import Settings
 
-BASE = {
-    "supabase_url": "https://proj.supabase.co/",
-    "supabase_publishable_key": "sb_publishable_x",
-    "koffito_backend_key": "backend-secret",
-}
-
-
-def test_derived_supabase_urls_strip_trailing_slash():
-    s = Settings(**BASE, _env_file=None)
-    assert s.supabase_url == "https://proj.supabase.co"
-    assert s.jwt_issuer == "https://proj.supabase.co/auth/v1"
-    assert s.jwks_url == "https://proj.supabase.co/auth/v1/.well-known/jwks.json"
-    assert s.rest_url == "https://proj.supabase.co/rest/v1"
+BASE = {"auth_jwt_secret": "s" * 40}
 
 
 def test_defaults_are_safe_for_development():
     s = Settings(**BASE, _env_file=None)
-    assert s.jwt_audience == "authenticated"
     assert s.environment == "development"
     assert s.enforce_https is False
+    assert s.cookie_secure is False
     assert s.jobs_enabled is False
     assert s.rate_limit_enabled is True
-    assert s.supabase_service_role_key is None
+    assert s.access_token_ttl_minutes == 15
 
 
 def test_secret_values_do_not_leak_in_repr():
-    s = Settings(**BASE, supabase_service_role_key="svc-secret", _env_file=None)
-    assert "backend-secret" not in repr(s)
-    assert "svc-secret" not in repr(s)
-    assert s.koffito_backend_key.get_secret_value() == "backend-secret"
+    s = Settings(**BASE, smtp_password="mail-secret", _env_file=None)
+    assert "s" * 40 not in repr(s)
+    assert "mail-secret" not in repr(s)
+    assert "koffito:koffito" not in repr(s)  # database password
+
+
+def test_jwt_secret_must_be_long():
+    with pytest.raises(ValidationError):
+        Settings(auth_jwt_secret="short", _env_file=None)
+
+
+def test_missing_jwt_secret_fails_fast():
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 def test_list_settings_split_on_commas():
@@ -56,9 +54,10 @@ def test_production_requires_https_and_explicit_hosts():
         trusted_hosts="api.koffito.app",
         _env_file=None,
     )
-    assert s.trusted_hosts == ["api.koffito.app"]
+    assert s.cookie_secure is True
 
 
-def test_missing_required_setting_fails_fast():
-    with pytest.raises(ValidationError):
-        Settings(supabase_url="https://proj.supabase.co", _env_file=None)
+def test_app_base_url_loses_trailing_slash():
+    assert Settings(**BASE, app_base_url="https://koffito.app/", _env_file=None).app_base_url == (
+        "https://koffito.app"
+    )

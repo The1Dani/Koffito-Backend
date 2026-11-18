@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from ..supabase import Auth, SupabaseRest
+from ..db import Auth, Database
 
 PROFILE_COLUMNS = (
     "id,display_name,avatar_emoji,avatar_url,gender,date_of_birth,occupation,"
@@ -14,7 +14,7 @@ SURVEY_COLUMNS = "survey_data,completed_at,updated_at"
 class ProfileRepository:
     """Direct table access for the signed-in user's own rows (RLS keeps it to their rows)."""
 
-    def __init__(self, sb: SupabaseRest, auth: Auth) -> None:
+    def __init__(self, sb: Database, auth: Auth) -> None:
         self._sb = sb
         self._auth = auth
 

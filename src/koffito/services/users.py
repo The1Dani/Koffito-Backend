@@ -3,14 +3,14 @@ from uuid import UUID
 
 from ..core.auth import AuthenticatedUser
 from ..core.errors import NotFoundError
+from ..db import Database, UserAuth
 from ..repositories import RpcRepository
-from ..supabase import SupabaseRest, UserAuth
 
 
 class UserService:
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        self._rpc = RpcRepository(sb, UserAuth(user.token))
+        self._rpc = RpcRepository(sb, UserAuth(user.id))
 
     async def public_profile(self, user_id: UUID) -> dict[str, Any]:
         # The RPC returns null both for "no such user" and "not visible to you"; the app

@@ -4,7 +4,7 @@ import time
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
-from ..supabase import SupabaseRest
+from ..db import Database
 from .completion import run_completion
 from .matchmaking import run_matchmaking
 from .notifier import LoggingNotifier, Notifier
@@ -13,22 +13,22 @@ from .venues import run_venue_assignment
 
 logger = logging.getLogger(__name__)
 
-JobFn = Callable[[SupabaseRest, Notifier], Awaitable[Any]]
+JobFn = Callable[[Database, Notifier], Awaitable[Any]]
 
 
-async def _reminders(sb: SupabaseRest, notifier: Notifier) -> Any:
+async def _reminders(sb: Database, notifier: Notifier) -> Any:
     return await run_reminders(sb, notifier)
 
 
-async def _matchmaking(sb: SupabaseRest, notifier: Notifier) -> Any:
+async def _matchmaking(sb: Database, notifier: Notifier) -> Any:
     return await run_matchmaking(sb)
 
 
-async def _venues(sb: SupabaseRest, notifier: Notifier) -> Any:
+async def _venues(sb: Database, notifier: Notifier) -> Any:
     return await run_venue_assignment(sb)
 
 
-async def _completion(sb: SupabaseRest, notifier: Notifier) -> Any:
+async def _completion(sb: Database, notifier: Notifier) -> Any:
     return await run_completion(sb)
 
 
@@ -41,7 +41,7 @@ JOBS: dict[str, JobFn] = {
 }
 
 
-async def run_job(name: str, sb: SupabaseRest, notifier: Notifier) -> Any:
+async def run_job(name: str, sb: Database, notifier: Notifier) -> Any:
     """Run one job once; exceptions propagate to the caller."""
     started = time.monotonic()
     result = await JOBS[name](sb, notifier)
@@ -50,7 +50,7 @@ async def run_job(name: str, sb: SupabaseRest, notifier: Notifier) -> Any:
 
 
 async def run_forever(
-    sb: SupabaseRest,
+    sb: Database,
     *,
     interval: float,
     notifier: Notifier | None = None,

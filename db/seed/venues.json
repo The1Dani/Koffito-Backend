@@ -1,0 +1,182 @@
+[
+  {
+    "name": "Naringi",
+    "description": "Light, plant-filled room just off the centre. Good for a slow morning and an even slower second cup.",
+    "photo_url": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&q=80&fit=crop",
+    "address": "Strada Alexandr Pușkin 26, Chișinău",
+    "website": "https://example.com/naringi",
+    "phone": null,
+    "rating": 4.7,
+    "popular_times": [
+      35,
+      70,
+      90,
+      60,
+      45,
+      80,
+      40
+    ]
+  },
+  {
+    "name": "Coffee Varka",
+    "description": "Small counter, quick service and a steady queue of regulars who know exactly what they want.",
+    "photo_url": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80&fit=crop",
+    "address": "Strada Columna 50, Chișinău",
+    "website": "https://example.com/coffee-varka",
+    "phone": null,
+    "rating": 4.5,
+    "popular_times": [
+      60,
+      85,
+      65,
+      40,
+      55,
+      75,
+      30
+    ]
+  },
+  {
+    "name": "Pasio Coffee",
+    "description": "A compact specialty bar where the baristas take pour-over as seriously as espresso.",
+    "photo_url": "https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=800&q=80&fit=crop",
+    "address": "Strada Vasile Alecsandri 115, Chișinău",
+    "website": "https://example.com/pasio-coffee",
+    "phone": null,
+    "rating": 4.8,
+    "popular_times": [
+      20,
+      45,
+      75,
+      95,
+      70,
+      50,
+      25
+    ]
+  },
+  {
+    "name": "Two Guys Coffee",
+    "description": "Friendly neighbourhood spot in Centru. Nothing fussy, just consistently good coffee.",
+    "photo_url": "https://images.unsplash.com/photo-1453614512568-c4024d13c247?w=800&q=80&fit=crop",
+    "address": "Strada Vasile Alecsandri 66, Chișinău",
+    "website": "https://example.com/two-guys-coffee",
+    "phone": null,
+    "rating": 4.6,
+    "popular_times": [
+      40,
+      80,
+      55,
+      35,
+      50,
+      65,
+      45
+    ]
+  },
+  {
+    "name": "BRUN Coffee Project",
+    "description": "Roasters first, café second. Ask what came off the drum this week.",
+    "photo_url": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&q=80&fit=crop",
+    "address": "Strada Alexei Mateevici 87, Chișinău",
+    "website": "https://example.com/brun-coffee",
+    "phone": null,
+    "rating": 4.8,
+    "popular_times": [
+      30,
+      65,
+      85,
+      70,
+      50,
+      60,
+      35
+    ]
+  },
+  {
+    "name": "Poetry Coffeeshop",
+    "description": "Right on the main boulevard, with enough corners to still feel private.",
+    "photo_url": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80&fit=crop",
+    "address": "Bulevardul Ștefan cel Mare și Sfânt, Chișinău",
+    "website": "https://example.com/poetry-coffeeshop",
+    "phone": null,
+    "rating": 4.4,
+    "popular_times": [
+      55,
+      75,
+      70,
+      60,
+      65,
+      85,
+      50
+    ]
+  },
+  {
+    "name": "Holly Nest Coffee & Events",
+    "description": "Half café, half event space. Quiet on weekday mornings, busy when something is on.",
+    "photo_url": "https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=800&q=80&fit=crop",
+    "address": "Chișinău",
+    "website": "https://example.com/holly-nest",
+    "phone": null,
+    "rating": 4.5,
+    "popular_times": [
+      25,
+      50,
+      70,
+      80,
+      60,
+      70,
+      55
+    ]
+  },
+  {
+    "name": "Tucano Coffee",
+    "description": "Laptop-friendly and open late. The armchairs at the back are the ones to aim for.",
+    "photo_url": "https://images.unsplash.com/photo-1453614512568-c4024d13c247?w=800&q=80&fit=crop",
+    "address": "Strada Alexandr Pușkin 15, Chișinău",
+    "website": "https://example.com/tucano-coffee",
+    "phone": null,
+    "rating": 4.3,
+    "popular_times": [
+      45,
+      70,
+      60,
+      55,
+      60,
+      80,
+      65
+    ]
+  },
+  {
+    "name": "Bonjour Cafe Maison",
+    "description": "Pastries in the window, a proper flat white at the counter. Easy place to meet someone new.",
+    "photo_url": "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&q=80&fit=crop",
+    "address": "Strada Columna, Chișinău",
+    "website": "https://example.com/bonjour-cafe",
+    "phone": null,
+    "rating": 4.6,
+    "popular_times": [
+      50,
+      80,
+      75,
+      50,
+      45,
+      70,
+      40
+    ]
+  },
+  {
+    "name": "Red Rabbit Specialty Coffee",
+    "description": "Out towards Râșcani and worth the trip. Single origins on rotation, no rush to leave.",
+    "photo_url": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&q=80&fit=crop",
+    "address": "Strada Nicolae Dimo 21/1, Chișinău",
+    "website": "https://example.com/red-rabbit",
+    "phone": null,
+    "rating": 4.7,
+    "popular_times": [
+      30,
+      55,
+      65,
+      45,
+      50,
+      75,
+      60
+    ]
+  }
+]

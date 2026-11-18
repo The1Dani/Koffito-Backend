@@ -4,11 +4,11 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from ..supabase import Auth, Filter, Page, SupabaseRest
+from ..db import Auth, Database, Filter, Page
 
 
 class RpcRepository:
-    def __init__(self, sb: SupabaseRest, auth: Auth) -> None:
+    def __init__(self, sb: Database, auth: Auth) -> None:
         self._sb = sb
         self._auth = auth
 

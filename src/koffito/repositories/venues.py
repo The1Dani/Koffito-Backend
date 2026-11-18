@@ -1,11 +1,11 @@
 from typing import Any
 from uuid import UUID
 
-from ..supabase import Auth, SupabaseRest
+from ..db import Auth, Database
 
 
 class VenueRepository:
-    def __init__(self, sb: SupabaseRest, auth: Auth) -> None:
+    def __init__(self, sb: Database, auth: Auth) -> None:
         self._sb = sb
         self._auth = auth
 

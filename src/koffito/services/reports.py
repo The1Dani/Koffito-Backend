@@ -1,15 +1,15 @@
 from typing import Any
 
 from ..core.auth import AuthenticatedUser
+from ..db import Database, UserAuth
 from ..repositories import ReportRepository
 from ..schemas import ReportIn
-from ..supabase import SupabaseRest, UserAuth
 
 
 class ReportService:
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        self._reports = ReportRepository(sb, UserAuth(user.token))
+        self._reports = ReportRepository(sb, UserAuth(user.id))
 
     async def create(self, body: ReportIn) -> dict[str, Any]:
         values = body.model_dump(mode="json")

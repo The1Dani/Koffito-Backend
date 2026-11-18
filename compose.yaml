@@ -1,19 +1,60 @@
-# Local run against the real Supabase project. `.env` supplies the secrets (see .env.example).
+# Local stack: our own Postgres, a fake SMTP inbox, and (optionally) the API + jobs in Docker.
+#   docker compose up -d db mail          # what you need for `uv run koffito` on the host
+#   docker compose up -d                  # everything, API on http://localhost:8000
+# Mailpit shows every email the backend sends at http://localhost:8025.
 services:
+  db:
+    # pgvector: surveys keep their matchmaking embedding as a `vector(64)`.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: koffito
+      POSTGRES_PASSWORD: koffito
+      POSTGRES_DB: koffito
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data_koffito:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U koffito -d koffito"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mail:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web inbox
+
   app:
     build: .
+    profiles: ["full"]
     ports:
       - "8000:8000"
     env_file:
       - .env
-    # Behind a TLS-terminating proxy set ENFORCE_HTTPS=true and TRUSTED_HOSTS in .env; uvicorn
-    # already runs with --proxy-headers (see Dockerfile).
+    environment:
+      DATABASE_URL: postgresql://koffito:koffito@db:5432/koffito
+      SMTP_HOST: mail
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "python -m koffito.migrate && uvicorn koffito.asgi:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'"]
 
-  # Background jobs (matchmaking, venue assignment, reminders, event completion) need
-  # SUPABASE_SERVICE_ROLE_KEY. They run here as their own service so `app` replicas never double
-  # up; alternatively drop this service and set JOBS_ENABLED=true on exactly one `app` instance.
+  # Background jobs (matchmaking, venue assignment, reminders, event completion) as their own
+  # service so `app` replicas never double up; or set JOBS_ENABLED=true on exactly one `app`.
   jobs:
     build: .
+    profiles: ["full"]
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://koffito:koffito@db:5432/koffito
+      SMTP_HOST: mail
+    depends_on:
+      db:
+        condition: service_healthy
     command: ["python", "-m", "koffito.jobs", "all", "--loop"]
+
+volumes:
+  pg_data_koffito:

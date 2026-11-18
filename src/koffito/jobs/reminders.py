@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from ..supabase import ServiceAuth, SupabaseRest
+from ..db import Database, ServiceAuth
 from .notifier import Notifier
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ CANDIDATE_COLUMNS = (
     "events!inner(id,title,event_at,status),"
     "profiles!inner(display_name,user_settings!inner(reminders_enabled))"
 )
-ACTIVE_EVENT_STATUSES = "in.(open,matched,confirmed)"
+ACTIVE_EVENT_STATUSES = ("open", "matched", "confirmed")
 BATCH = 500
 
 
@@ -51,24 +51,35 @@ PASSES = (
 
 
 async def run_reminders(
-    sb: SupabaseRest, notifier: Notifier, *, now: datetime | None = None
+    sb: Database, notifier: Notifier, *, now: datetime | None = None
 ) -> ReminderStats:
     now = now or datetime.now(UTC)
     stats = ReminderStats()
     for reminder in PASSES:
-        rows = await sb.select(
-            "event_participants",
-            auth=ServiceAuth(),
-            columns=CANDIDATE_COLUMNS,
-            filters=[
-                ("status", f"in.({','.join(reminder.statuses)})"),
-                (reminder.stamp_column, "is.null"),
-                ("events.status", ACTIVE_EVENT_STATUSES),
-                ("events.event_at", f"gte.{now.isoformat()}"),
-                ("events.event_at", f"lte.{(now + reminder.window).isoformat()}"),
-                ("profiles.user_settings.reminders_enabled", "eq.true"),
+        stamp = reminder.stamp_column  # one of two fixed column names (see PASSES)
+        rows = await sb.fetch(
+            f"""
+            select ep.id, ep.user_id,
+                   jsonb_build_object('id', e.id, 'event_at', e.event_at,
+                                      'title', e.title) as events
+            from public.event_participants ep
+            join public.events e on e.id = ep.event_id
+            join public.user_settings us on us.user_id = ep.user_id
+            where ep.status::text = any(%s)
+              and ep.{stamp} is null
+              and e.status::text = any(%s)
+              and e.event_at >= %s and e.event_at <= %s
+              and us.reminders_enabled
+            limit %s
+            """,
+            [
+                list(reminder.statuses),
+                list(ACTIVE_EVENT_STATUSES),
+                now,
+                now + reminder.window,
+                BATCH,
             ],
-            limit=BATCH,
+            auth=ServiceAuth(),
         )
         for row in rows:
             if await _remind(sb, notifier, reminder, row, now):
@@ -82,7 +93,7 @@ async def run_reminders(
 
 
 async def _remind(
-    sb: SupabaseRest, notifier: Notifier, reminder: _Pass, row: dict[str, Any], now: datetime
+    sb: Database, notifier: Notifier, reminder: _Pass, row: dict[str, Any], now: datetime
 ) -> bool:
     event = row["events"]
     payload = {"event_id": event["id"], "event_at": event["event_at"], "title": event.get("title")}

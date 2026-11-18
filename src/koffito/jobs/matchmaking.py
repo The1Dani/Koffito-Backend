@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ..supabase import ServiceAuth, SupabaseRest
+from ..db import Database, ServiceAuth
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def plan_groups(participants: list[dict[str, Any]], target_size: int) -> list[li
     return groups
 
 
-async def run_matchmaking(sb: SupabaseRest, *, now: datetime | None = None) -> MatchmakingStats:
+async def run_matchmaking(sb: Database, *, now: datetime | None = None) -> MatchmakingStats:
     now = now or datetime.now(UTC)
     stats = MatchmakingStats()
     events = await sb.select(

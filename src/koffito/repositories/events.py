@@ -1,34 +1,35 @@
 from typing import Any
 from uuid import UUID
 
-from ..supabase import Auth, SupabaseRest
-
-PARTICIPANT_COLUMNS = (
-    "id,user_id,status,group_id,joined_at,confirmed_24h_at,confirmed_3h_at,cancelled_at,"
-    "attended,attendance_note,reveal_opened_at,reminded_24h_at,reminded_3h_at,"
-    "profile:profiles(display_name,avatar_emoji)"
-)
+from ..db import Auth, Database
 
 
 class EventRepository:
-    """Direct table access to events/participants (admin RLS decides what is visible)."""
+    """Direct table access to events/participants. Admin-only: callers sit behind require_admin."""
 
-    def __init__(self, sb: SupabaseRest, auth: Auth) -> None:
+    def __init__(self, sb: Database, auth: Auth) -> None:
         self._sb = sb
         self._auth = auth
 
     async def update(self, event_id: UUID, values: dict[str, Any]) -> list[dict[str, Any]]:
-        # `authenticated` cannot read default_venue_id, so only `id` comes back; the caller
-        # re-reads the row through admin_list_events().
+        # Only `id` comes back; the caller re-reads the row through admin_list_events().
         return await self._sb.update(
             "events", values, auth=self._auth, filters=[("id", f"eq.{event_id}")], columns="id"
         )
 
     async def participants(self, event_id: UUID) -> list[dict[str, Any]]:
-        return await self._sb.select(
-            "event_participants",
+        return await self._sb.fetch(
+            """
+            select ep.id, ep.user_id, ep.status, ep.group_id, ep.joined_at, ep.confirmed_24h_at,
+                   ep.confirmed_3h_at, ep.cancelled_at, ep.attended, ep.attendance_note,
+                   ep.reveal_opened_at, ep.reminded_24h_at, ep.reminded_3h_at,
+                   jsonb_build_object('display_name', p.display_name,
+                                      'avatar_emoji', p.avatar_emoji) as profile
+            from public.event_participants ep
+            join public.profiles p on p.id = ep.user_id
+            where ep.event_id = %s
+            order by ep.joined_at asc
+            """,
+            [event_id],
             auth=self._auth,
-            columns=PARTICIPANT_COLUMNS,
-            filters=[("event_id", f"eq.{event_id}")],
-            order="joined_at.asc",
         )

@@ -4,13 +4,13 @@ from uuid import UUID
 
 from ..core.auth import AuthenticatedUser
 from ..core.errors import NotFoundError, UnprocessableError
+from ..db import Database, DatabaseError, Filter, Page, UserAuth
 from ..repositories import EventRepository, ReportRepository, RpcRepository, VenueRepository
 from ..schemas import EventCreate, EventUpdate, ReportStatusUpdate, VenueCreate, VenueUpdate
-from ..supabase import Filter, Page, SupabaseError, SupabaseRest, UserAuth
 
 
-def _not_found_on_pgrst116(exc: SupabaseError, code: str, message: str) -> None:
-    if exc.code == "PGRST116":
+def _not_found_on_missing_row(exc: DatabaseError, code: str, message: str) -> None:
+    if exc.code == "not_found":
         raise NotFoundError(message, code=code) from exc
     raise exc
 
@@ -18,9 +18,9 @@ def _not_found_on_pgrst116(exc: SupabaseError, code: str, message: str) -> None:
 class AdminEventService:
     """Event administration. Runs with the admin's own token: RLS `is_admin()` policies apply."""
 
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        auth = UserAuth(user.token)
+        auth = UserAuth(user.id)
         self._rpc = RpcRepository(sb, auth)
         self._events = EventRepository(sb, auth)
 
@@ -47,8 +47,8 @@ class AdminEventService:
     async def get(self, event_id: UUID) -> dict[str, Any]:
         try:
             return await self._rpc.admin_get_event(event_id)
-        except SupabaseError as exc:
-            _not_found_on_pgrst116(exc, "event_not_found", "Event not found")
+        except DatabaseError as exc:
+            _not_found_on_missing_row(exc, "event_not_found", "Event not found")
             raise
 
     async def create(self, body: EventCreate) -> dict[str, Any]:
@@ -69,9 +69,9 @@ class AdminEventService:
 
 
 class AdminVenueService:
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        self._venues = VenueRepository(sb, UserAuth(user.token))
+        self._venues = VenueRepository(sb, UserAuth(user.id))
 
     async def list(self, *, include_inactive: bool) -> list[dict[str, Any]]:
         return await self._venues.list(include_inactive=include_inactive)
@@ -79,8 +79,8 @@ class AdminVenueService:
     async def get(self, venue_id: UUID) -> dict[str, Any]:
         try:
             return await self._venues.get(venue_id)
-        except SupabaseError as exc:
-            _not_found_on_pgrst116(exc, "venue_not_found", "Venue not found")
+        except DatabaseError as exc:
+            _not_found_on_missing_row(exc, "venue_not_found", "Venue not found")
             raise
 
     async def create(self, body: VenueCreate) -> dict[str, Any]:
@@ -105,9 +105,9 @@ class AdminVenueService:
 
 
 class AdminReportService:
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        self._reports = ReportRepository(sb, UserAuth(user.token))
+        self._reports = ReportRepository(sb, UserAuth(user.id))
 
     async def list(self, *, status: str | None, limit: int, offset: int) -> Page:
         filters: list[Filter] = [("status", f"eq.{status}")] if status else []

@@ -2,17 +2,17 @@ from typing import Any
 from uuid import UUID
 
 from ..core.auth import AuthenticatedUser
+from ..db import Database, UserAuth
 from ..repositories import RpcRepository
 from ..schemas import AttendanceIn, ConfirmIn, RatingIn
-from ..supabase import SupabaseRest, UserAuth
 
 
 class EventService:
     """Event participation for the signed-in user; every rule lives in the SQL RPCs."""
 
-    def __init__(self, sb: SupabaseRest, user: AuthenticatedUser) -> None:
+    def __init__(self, sb: Database, user: AuthenticatedUser) -> None:
         self.user = user
-        self._rpc = RpcRepository(sb, UserAuth(user.token))
+        self._rpc = RpcRepository(sb, UserAuth(user.id))
 
     async def list_open(self) -> list[dict[str, Any]]:
         return await self._rpc.get_open_events()
