@@ -1,0 +1,128 @@
+{
+  "alembic/env.py": {
+    "mtime": 1795620297.4109344,
+    "seen": 1795620438.7341208,
+    "ast_hash": "573232d289f8f9c8f2bc3ad3b95c4a92",
+    "semantic_hash": "573232d289f8f9c8f2bc3ad3b95c4a92"
+  },
+  "alembic/rls.py": {
+    "mtime": 1795620297.4110272,
+    "seen": 1795620438.734126,
+    "ast_hash": "9bbc9049e82a56f4910a42d6d1429fda",
+    "semantic_hash": "9bbc9049e82a56f4910a42d6d1429fda"
+  },
+  "alembic/versions/f71714a4b376_creatae_items_table.py": {
+    "mtime": 1795620297.4112568,
+    "seen": 1795620438.7341282,
+    "ast_hash": "a14849b7d92813c88c4ea23bb8ad67a4",
+    "semantic_hash": "a14849b7d92813c88c4ea23bb8ad67a4"
+  },
+  "compose.yaml": {
+    "mtime": 1795620297.411343,
+    "seen": 1795620438.734129,
+    "ast_hash": "b0bdfb3de226b8148d897b7c20606679",
+    "semantic_hash": "b0bdfb3de226b8148d897b7c20606679"
+  },
+  "pyproject.toml": {
+    "mtime": 1795620297.411437,
+    "seen": 1795620438.73413,
+    "ast_hash": "015f6ed0cb2e220a9a848c063adc9e0f",
+    "semantic_hash": "015f6ed0cb2e220a9a848c063adc9e0f"
+  },
+  "src/koffito/__init__.py": {
+    "mtime": 1795620297.411612,
+    "seen": 1795620438.7341309,
+    "ast_hash": "4c9da21ed16125a780f00fa823444d26",
+    "semantic_hash": "4c9da21ed16125a780f00fa823444d26"
+  },
+  "src/koffito/api/__init__.py": {
+    "mtime": 1795620297.411692,
+    "seen": 1795620438.734132,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "src/koffito/api/deps.py": {
+    "mtime": 1795620297.4117858,
+    "seen": 1795620438.734132,
+    "ast_hash": "076facabe90fa43a075b09c5881238c5",
+    "semantic_hash": "076facabe90fa43a075b09c5881238c5"
+  },
+  "src/koffito/api/routes/__init__.py": {
+    "mtime": 1795620297.4118788,
+    "seen": 1795620438.734133,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "src/koffito/api/routes/items.py": {
+    "mtime": 1795620297.4119828,
+    "seen": 1795620438.734134,
+    "ast_hash": "b97d58cb9611034856217235b11d8529",
+    "semantic_hash": "b97d58cb9611034856217235b11d8529"
+  },
+  "src/koffito/api/routes/root.py": {
+    "mtime": 1795620297.4120626,
+    "seen": 1795620438.7341352,
+    "ast_hash": "784756a7a8ff214fc88179dbba2600d8",
+    "semantic_hash": "784756a7a8ff214fc88179dbba2600d8"
+  },
+  "src/koffito/db.py": {
+    "mtime": 1795620297.4121504,
+    "seen": 1795620438.7341352,
+    "ast_hash": "e2e6a378b505be2f1904cfca48438f10",
+    "semantic_hash": "e2e6a378b505be2f1904cfca48438f10"
+  },
+  "src/koffito/main.py": {
+    "mtime": 1795620297.4122303,
+    "seen": 1795620438.734136,
+    "ast_hash": "4b5de8b93ecd59b8ea3f698304989c24",
+    "semantic_hash": "4b5de8b93ecd59b8ea3f698304989c24"
+  },
+  "src/koffito/models/__init__.py": {
+    "mtime": 1795620297.412352,
+    "seen": 1795620438.734137,
+    "ast_hash": "2f0d72a5f9e3d042b3d9ac506c23da24",
+    "semantic_hash": "2f0d72a5f9e3d042b3d9ac506c23da24"
+  },
+  "src/koffito/models/item.py": {
+    "mtime": 1795620297.4124348,
+    "seen": 1795620438.734138,
+    "ast_hash": "0e592f55e42f42bfeeca643224de1781",
+    "semantic_hash": "0e592f55e42f42bfeeca643224de1781"
+  },
+  "src/koffito/repositories/__init__.py": {
+    "mtime": 1795620297.4125547,
+    "seen": 1795620438.734138,
+    "ast_hash": "10bad91335c4e471139f973b4e4797f2",
+    "semantic_hash": "10bad91335c4e471139f973b4e4797f2"
+  },
+  "src/koffito/repositories/item.py": {
+    "mtime": 1795620297.4126391,
+    "seen": 1795620438.734139,
+    "ast_hash": "3921e7636310260686ce2ebb5fc1d4ab",
+    "semantic_hash": "3921e7636310260686ce2ebb5fc1d4ab"
+  },
+  "src/koffito/schemas/__init__.py": {
+    "mtime": 1795620297.4127693,
+    "seen": 1795620438.73414,
+    "ast_hash": "5fd55fec4930fbe92532cdce3d293137",
+    "semantic_hash": "5fd55fec4930fbe92532cdce3d293137"
+  },
+  "src/koffito/schemas/item.py": {
+    "mtime": 1795620297.4128506,
+    "seen": 1795620438.7341409,
+    "ast_hash": "c77e2aa17a24c7fa4b50ff34895a162e",
+    "semantic_hash": "c77e2aa17a24c7fa4b50ff34895a162e"
+  },
+  "src/koffito/services/__init__.py": {
+    "mtime": 1795620297.41297,
+    "seen": 1795620438.7341409,
+    "ast_hash": "3af91bad878dd65170fe7b3f837038ea",
+    "semantic_hash": "3af91bad878dd65170fe7b3f837038ea"
+  },
+  "src/koffito/services/item.py": {
+    "mtime": 1795620297.413054,
+    "seen": 1795620438.734142,
+    "ast_hash": "b628c6ed36393440c560594dcde05619",
+    "semantic_hash": "b628c6ed36393440c560594dcde05619"
+  }
+}
